@@ -253,7 +253,7 @@ class SonyTVController:
 
                     if is_tv_channel:
                         channel = {
-                            'number': item.get('channelNumber', ''),
+                            'number': item.get('index', ''),
                             'name': item.get('title', 'Unknown'),
                             'uri': item.get('uri', ''),
                             'source': source_title,
@@ -1012,7 +1012,7 @@ class TVRequestHandler(BaseHTTPRequestHandler):
                     fetch('/channels')
                         .then(response => response.json())
                         .then(data => {
-                            if (data.status === 'success') {
+                            if (data.status == 'success') {
                                 allChannels = data.data.channels;
                                 renderChannels(allChannels);
                                 document.getElementById('channelCount').textContent =
@@ -1043,7 +1043,7 @@ class TVRequestHandler(BaseHTTPRequestHandler):
                     fetch('/refresh')
                         .then(response => response.json())
                         .then(data => {
-                            if (data.status === 'success') {
+                            if (data.status == 'success') {
                                 allChannels = data.data.channels;
                                 renderChannels(allChannels);
                                 showNotification('Channels refreshed!', 'success');
@@ -1086,7 +1086,7 @@ class TVRequestHandler(BaseHTTPRequestHandler):
                     fetch('/switch/' + encodeURIComponent(channelNumber))
                         .then(response => response.json())
                         .then(data => {
-                            if (data.status === 'success') {
+                            if (data.status == 'success') {
                                 showNotification('Switched to ' + channelName, 'success');
                                 // Move selected channel to top
                                 moveChannelToTop(channelNumber);
@@ -1106,8 +1106,8 @@ class TVRequestHandler(BaseHTTPRequestHandler):
 
                 function moveChannelToTop(channelNumber) {
                     // Find the channel
-                    const index = allChannels.findIndex(c => c.number === channelNumber);
-                    if (index === -1) return;
+                    const index = allChannels.findIndex(c => c.number == channelNumber);
+                    if (index == -1) return;
 
                     // Remove from current position and insert at beginning
                     const channel = allChannels.splice(index, 1)[0];
@@ -1121,7 +1121,7 @@ class TVRequestHandler(BaseHTTPRequestHandler):
                 function renderChannels(channels) {
                     const container = document.getElementById('channelsContainer');
 
-                    if (!channels || channels.length === 0) {
+                    if (!channels || channels.length == 0) {
                         container.innerHTML = `
                             <div class="no-channels">
                                 <i>📺</i>
@@ -1134,7 +1134,7 @@ class TVRequestHandler(BaseHTTPRequestHandler):
 
                     let html = '';
                     channels.forEach(channel => {
-                        const isCurrent = channel.number === currentChannel;
+                        const isCurrent = channel.number == currentChannel;
                         const channelClass = 'channel-card' + (isCurrent ? ' current' : '');
 
                         html += `
