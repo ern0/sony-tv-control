@@ -3,7 +3,7 @@
 Sony TV Web Service
 Provides REST API endpoints to control Sony Bravia TV
 Gets channel list directly from TV via HTTP API
-Reads only IP and access code from tv.toml
+Includes AJAX interface with channel switching and reordering
 """
 
 import json
@@ -109,8 +109,7 @@ class SonyTVController:
             logger.error("Failed to get scheme list")
             return []
 
-        # FIX: Handle the actual response format
-        # The result might be an array of scheme names directly
+        # Handle the actual response format
         schemes_data = schemes_result["result"]
         logger.debug(f"Raw schemes data: {schemes_data}")
 
@@ -158,7 +157,7 @@ class SonyTVController:
             if not sources_result or "result" not in sources_result:
                 continue
 
-            # FIX: Handle the actual response format for sources
+            # Handle the actual response format for sources
             sources_data = sources_result["result"]
             sources = []
 
@@ -232,10 +231,10 @@ class SonyTVController:
                 if not content_result or "result" not in content_result:
                     continue
 
-                # FIX: Handle the actual response format for content
+                # Handle the actual response format for content
                 content_data = content_result["result"]
-
                 items = []
+
                 if content_data and len(content_data) > 0:
                     first_item = content_data[0]
                     if isinstance(first_item, list):
@@ -254,7 +253,7 @@ class SonyTVController:
 
                     if is_tv_channel:
                         channel = {
-                            'number': item.get('index', ''),
+                            'number': item.get('channelNumber', ''),
                             'name': item.get('title', 'Unknown'),
                             'uri': item.get('uri', ''),
                             'source': source_title,
@@ -411,7 +410,6 @@ class SonyTVController:
         # Try to find channel by number
         target_channel = None
         for channel in channels:
-            print(channel.get('number'))
             if str(channel.get('number')) == str(channel_identifier):
                 target_channel = channel
                 break
@@ -494,11 +492,18 @@ class TVRequestHandler(BaseHTTPRequestHandler):
             'timestamp': datetime.now().isoformat()
         }
 
-        self.wfile.write(json.dumps(response, indent=2).encode('utf-8'))
+        self.wfile.write(json.dumps(response).encode('utf-8'))
 
     def _send_error(self, status_code: int, message: str):
         """Send error response"""
         self._send_response(status_code, {'message': message})
+
+    def _send_html(self, html: str):
+        """Send HTML response"""
+        self.send_response(200)
+        self.send_header('Content-Type', 'text/html')
+        self.end_headers()
+        self.wfile.write(html.encode('utf-8'))
 
     def do_GET(self):
         """Handle GET requests"""
@@ -526,83 +531,634 @@ class TVRequestHandler(BaseHTTPRequestHandler):
             self.handle_power()
         elif path == '/refresh':
             self.handle_refresh_channels()
+        elif path == '/channels':
+            self.handle_channels_api(query)
         else:
             self._send_error(404, f"Endpoint not found: {path}")
 
     def handle_root(self):
-        """Handle root endpoint - API documentation"""
-        html = """
+        """Handle root endpoint - Main HTML interface with AJAX"""
+        html = self._generate_main_html()
+        self._send_html(html)
+
+    def _generate_main_html(self) -> str:
+        """Generate the main HTML page with AJAX functionality"""
+        return """
         <!DOCTYPE html>
         <html>
         <head>
-            <title>Sony TV Web Service</title>
+            <title>Sony TV Remote</title>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
             <style>
-                body { font-family: Arial, sans-serif; margin: 40px; line-height: 1.6; }
-                h1 { color: #333; }
-                code { background: #f4f4f4; padding: 2px 5px; border-radius: 3px; }
-                .endpoint { background: #e8f4f8; padding: 10px; margin: 10px 0; border-left: 4px solid #2196F3; }
-                .note { background: #fff3e0; padding: 10px; border-left: 4px solid #ff9800; margin: 10px 0; }
+                * {
+                    box-sizing: border-box;
+                    margin: 0;
+                    padding: 0;
+                }
+
+                body {
+                    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+                    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                    min-height: 100vh;
+                    padding: 20px;
+                }
+
+                .container {
+                    max-width: 1200px;
+                    margin: 0 auto;
+                    background: white;
+                    border-radius: 20px;
+                    box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+                    overflow: hidden;
+                }
+
+                .header {
+                    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                    color: white;
+                    padding: 30px;
+                    text-align: center;
+                }
+
+                .header h1 {
+                    font-size: 2.5em;
+                    margin-bottom: 10px;
+                }
+
+                .header p {
+                    opacity: 0.9;
+                    font-size: 1.1em;
+                }
+
+                .status-bar {
+                    background: #f8f9fa;
+                    padding: 15px 30px;
+                    border-bottom: 1px solid #e9ecef;
+                    display: flex;
+                    align-items: center;
+                    gap: 20px;
+                    flex-wrap: wrap;
+                }
+
+                .status-item {
+                    display: flex;
+                    align-items: center;
+                    gap: 8px;
+                }
+
+                .status-label {
+                    font-weight: 600;
+                    color: #495057;
+                }
+
+                .status-value {
+                    color: #212529;
+                }
+
+                .status-dot {
+                    width: 12px;
+                    height: 12px;
+                    border-radius: 50%;
+                    display: inline-block;
+                }
+
+                .dot-connected {
+                    background: #28a745;
+                    box-shadow: 0 0 10px #28a745;
+                }
+
+                .dot-disconnected {
+                    background: #dc3545;
+                }
+
+                .channel-count {
+                    background: #007bff;
+                    color: white;
+                    padding: 4px 12px;
+                    border-radius: 20px;
+                    font-size: 0.9em;
+                    margin-left: auto;
+                }
+
+                .search-section {
+                    padding: 20px 30px;
+                    background: white;
+                    border-bottom: 1px solid #e9ecef;
+                }
+
+                .search-box {
+                    width: 100%;
+                    padding: 12px 20px;
+                    font-size: 1em;
+                    border: 2px solid #e9ecef;
+                    border-radius: 10px;
+                    transition: border-color 0.3s;
+                }
+
+                .search-box:focus {
+                    outline: none;
+                    border-color: #667eea;
+                }
+
+                .channels-section {
+                    padding: 0 30px 30px 30px;
+                    background: white;
+                }
+
+                .channels-header {
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: center;
+                    margin-bottom: 20px;
+                    padding-top: 20px;
+                }
+
+                .channels-title {
+                    font-size: 1.5em;
+                    color: #333;
+                }
+
+                .refresh-btn {
+                    background: #28a745;
+                    color: white;
+                    border: none;
+                    padding: 10px 20px;
+                    border-radius: 8px;
+                    cursor: pointer;
+                    font-size: 0.9em;
+                    display: flex;
+                    align-items: center;
+                    gap: 5px;
+                    transition: background 0.3s;
+                }
+
+                .refresh-btn:hover {
+                    background: #218838;
+                }
+
+                .refresh-btn:disabled {
+                    background: #6c757d;
+                    cursor: not-allowed;
+                }
+
+                .channels-grid {
+                    display: grid;
+                    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+                    gap: 15px;
+                    max-height: 600px;
+                    overflow-y: auto;
+                    padding: 5px;
+                }
+
+                .channel-card {
+                    background: #f8f9fa;
+                    border-radius: 10px;
+                    padding: 15px;
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: center;
+                    transition: all 0.3s;
+                    border: 2px solid transparent;
+                    animation: fadeIn 0.5s ease-out;
+                }
+
+                .channel-card:hover {
+                    transform: translateY(-2px);
+                    box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+                    border-color: #667eea;
+                }
+
+                .channel-card.current {
+                    background: linear-gradient(135deg, #667eea20 0%, #764ba220 100%);
+                    border-color: #667eea;
+                    order: -1;
+                }
+
+                @keyframes fadeIn {
+                    from {
+                        opacity: 0;
+                        transform: translateY(10px);
+                    }
+                    to {
+                        opacity: 1;
+                        transform: translateY(0);
+                    }
+                }
+
+                .channel-info {
+                    flex: 1;
+                }
+
+                .channel-number {
+                    font-size: 1.2em;
+                    font-weight: bold;
+                    color: #667eea;
+                }
+
+                .channel-name {
+                    font-size: 1.1em;
+                    color: #333;
+                    margin-top: 4px;
+                }
+
+                .channel-source {
+                    font-size: 0.8em;
+                    color: #6c757d;
+                    margin-top: 4px;
+                }
+
+                .switch-btn {
+                    background: #007bff;
+                    color: white;
+                    border: none;
+                    padding: 8px 16px;
+                    border-radius: 6px;
+                    cursor: pointer;
+                    font-size: 0.9em;
+                    transition: background 0.3s;
+                    margin-left: 10px;
+                }
+
+                .switch-btn:hover {
+                    background: #0056b3;
+                }
+
+                .switch-btn:disabled {
+                    background: #6c757d;
+                    cursor: not-allowed;
+                }
+
+                .loading {
+                    text-align: center;
+                    padding: 40px;
+                    color: #6c757d;
+                }
+
+                .loading-spinner {
+                    border: 4px solid #f3f3f3;
+                    border-top: 4px solid #667eea;
+                    border-radius: 50%;
+                    width: 40px;
+                    height: 40px;
+                    animation: spin 1s linear infinite;
+                    margin: 0 auto 20px;
+                }
+
+                @keyframes spin {
+                    0% { transform: rotate(0deg); }
+                    100% { transform: rotate(360deg); }
+                }
+
+                .error-message {
+                    background: #f8d7da;
+                    color: #721c24;
+                    padding: 15px;
+                    border-radius: 8px;
+                    margin: 20px 0;
+                }
+
+                .success-message {
+                    background: #d4edda;
+                    color: #155724;
+                    padding: 10px 15px;
+                    border-radius: 8px;
+                    margin: 10px 0;
+                    animation: slideIn 0.3s ease-out;
+                }
+
+                @keyframes slideIn {
+                    from {
+                        transform: translateY(-20px);
+                        opacity: 0;
+                    }
+                    to {
+                        transform: translateY(0);
+                        opacity: 1;
+                    }
+                }
+
+                .notification {
+                    position: fixed;
+                    top: 20px;
+                    right: 20px;
+                    padding: 15px 20px;
+                    border-radius: 8px;
+                    color: white;
+                    animation: slideInRight 0.3s ease-out;
+                    z-index: 1000;
+                }
+
+                @keyframes slideInRight {
+                    from {
+                        transform: translateX(100%);
+                        opacity: 0;
+                    }
+                    to {
+                        transform: translateX(0);
+                        opacity: 1;
+                    }
+                }
+
+                .notification.success {
+                    background: #28a745;
+                }
+
+                .notification.error {
+                    background: #dc3545;
+                }
+
+                .notification.info {
+                    background: #17a2b8;
+                }
+
+                .stats {
+                    display: flex;
+                    gap: 10px;
+                    align-items: center;
+                }
+
+                .last-updated {
+                    font-size: 0.9em;
+                    color: #6c757d;
+                }
+
+                .no-channels {
+                    text-align: center;
+                    padding: 60px;
+                    color: #6c757d;
+                }
+
+                .no-channels i {
+                    font-size: 4em;
+                    margin-bottom: 20px;
+                    display: block;
+                }
             </style>
         </head>
         <body>
-            <h1>📺 Sony TV Web Service</h1>
-            <p>REST API for controlling your Sony Bravia TV</p>
+            <div class="container">
+                <div class="header">
+                    <h1>📺 Sony TV Remote</h1>
+                    <p>Control your TV with live channel data</p>
+                </div>
 
-            <div class="note">
-                <strong>📡 Live TV Data:</strong> Channel lists are fetched directly from your TV via its HTTP API.
-                No manual configuration needed!
+                <div class="status-bar" id="statusBar">
+                    <div class="status-item">
+                        <span class="status-label">Status:</span>
+                        <span class="status-dot" id="connectionDot"></span>
+                        <span class="status-value" id="connectionStatus">Checking...</span>
+                    </div>
+                    <div class="status-item">
+                        <span class="status-label">Power:</span>
+                        <span class="status-value" id="powerStatus">Unknown</span>
+                    </div>
+                    <div class="status-item">
+                        <span class="status-label">TV IP:</span>
+                        <span class="status-value" id="tvIp">""" + self.tv.ip_address + """</span>
+                    </div>
+                    <div class="channel-count" id="channelCount">0 channels</div>
+                </div>
+
+                <div class="search-section">
+                    <input type="text" class="search-box" id="searchBox" placeholder="🔍 Search channels by name or number...">
+                </div>
+
+                <div class="channels-section">
+                    <div class="channels-header">
+                        <h2 class="channels-title">TV Channels</h2>
+                        <div class="stats">
+                            <span class="last-updated" id="lastUpdated"></span>
+                            <button class="refresh-btn" id="refreshBtn" onclick="refreshChannels()">
+                                🔄 Refresh
+                            </button>
+                        </div>
+                    </div>
+
+                    <div id="channelsContainer" class="channels-grid">
+                        <div class="loading">
+                            <div class="loading-spinner"></div>
+                            Loading channels from TV...
+                        </div>
+                    </div>
+                </div>
             </div>
 
-            <h2>Available Endpoints:</h2>
+            <div id="notification" style="display: none;"></div>
 
-            <div class="endpoint">
-                <strong>GET /</strong> - This documentation
-            </div>
+            <script>
+                // Pure JavaScript - No external libraries
+                let currentChannel = null;
+                let allChannels = [];
+                let searchTimeout = null;
 
-            <div class="endpoint">
-                <strong>GET /list</strong> - List all TV channels (from TV)<br>
-                <em>Optional query params:</em><br>
-                <code>?format=json</code> - Returns JSON (default)<br>
-                <code>?format=html</code> - Returns HTML table<br>
-                <code>?refresh=true</code> - Force refresh from TV
-            </div>
+                // Load channels on page load
+                document.addEventListener('DOMContentLoaded', function() {
+                    loadChannels();
+                    loadStatus();
 
-            <div class="endpoint">
-                <strong>GET /refresh</strong> - Force refresh channel list from TV
-            </div>
+                    // Set up search with debounce
+                    document.getElementById('searchBox').addEventListener('input', function(e) {
+                        clearTimeout(searchTimeout);
+                        searchTimeout = setTimeout(() => {
+                            filterChannels(e.target.value);
+                        }, 300);
+                    });
 
-            <div class="endpoint">
-                <strong>GET /switch/&lt;channel&gt;</strong> - Switch to a channel<br>
-                <em>Examples:</em><br>
-                <code>/switch/101</code> - Switch to channel 101<br>
-                <code>/switch/bbc</code> - Switch to channel containing "bbc"
-            </div>
+                    // Auto-refresh status every 30 seconds
+                    setInterval(loadStatus, 30000);
+                });
 
-            <div class="endpoint">
-                <strong>GET /status</strong> - Get TV status (power, connection, channel count)
-            </div>
+                function showNotification(message, type) {
+                    const notification = document.getElementById('notification');
+                    notification.style.display = 'block';
+                    notification.className = 'notification ' + type;
+                    notification.textContent = message;
 
-            <div class="endpoint">
-                <strong>GET /power</strong> - Get power status
-            </div>
+                    setTimeout(() => {
+                        notification.style.display = 'none';
+                    }, 3000);
+                }
 
-            <h2>Configuration:</h2>
-            <p>Edit <code>tv.toml</code> to configure:</p>
-            <ul>
-                <li>TV IP address</li>
-                <li>Access code (PSK)</li>
-                <li>Web server port</li>
-            </ul>
+                function loadStatus() {
+                    fetch('/status')
+                        .then(response => response.json())
+                        .then(data => {
+                            const connected = data.data.connected;
+                            const dot = document.getElementById('connectionDot');
+                            const status = document.getElementById('connectionStatus');
+                            const power = document.getElementById('powerStatus');
 
-            <p><em>Channel list is automatically discovered from your TV!</em></p>
+                            dot.className = 'status-dot ' + (connected ? 'dot-connected' : 'dot-disconnected');
+                            status.textContent = connected ? 'Connected' : 'Disconnected';
+                            power.textContent = data.data.power || 'Unknown';
+
+                            if (data.data.channels) {
+                                document.getElementById('channelCount').textContent =
+                                    data.data.channels.total + ' channels';
+
+                                if (data.data.channels.last_updated) {
+                                    const updated = new Date(data.data.channels.last_updated);
+                                    document.getElementById('lastUpdated').textContent =
+                                        'Updated: ' + updated.toLocaleTimeString();
+                                }
+                            }
+                        })
+                        .catch(error => {
+                            console.error('Status error:', error);
+                        });
+                }
+
+                function loadChannels() {
+                    fetch('/channels')
+                        .then(response => response.json())
+                        .then(data => {
+                            if (data.status === 'success') {
+                                allChannels = data.data.channels;
+                                renderChannels(allChannels);
+                                document.getElementById('channelCount').textContent =
+                                    allChannels.length + ' channels';
+                            } else {
+                                showNotification('Failed to load channels', 'error');
+                            }
+                        })
+                        .catch(error => {
+                            console.error('Error:', error);
+                            document.getElementById('channelsContainer').innerHTML =
+                                '<div class="error-message">Failed to load channels. Check connection.</div>';
+                        });
+                }
+
+                function refreshChannels() {
+                    const btn = document.getElementById('refreshBtn');
+                    btn.disabled = true;
+                    btn.innerHTML = '🔄 Refreshing...';
+
+                    document.getElementById('channelsContainer').innerHTML = `
+                        <div class="loading">
+                            <div class="loading-spinner"></div>
+                            Refreshing channels from TV...
+                        </div>
+                    `;
+
+                    fetch('/refresh')
+                        .then(response => response.json())
+                        .then(data => {
+                            if (data.status === 'success') {
+                                allChannels = data.data.channels;
+                                renderChannels(allChannels);
+                                showNotification('Channels refreshed!', 'success');
+                                loadStatus();
+                            } else {
+                                showNotification('Refresh failed', 'error');
+                            }
+                        })
+                        .catch(error => {
+                            console.error('Error:', error);
+                            showNotification('Refresh failed', 'error');
+                        })
+                        .finally(() => {
+                            btn.disabled = false;
+                            btn.innerHTML = '🔄 Refresh';
+                        });
+                }
+
+                function filterChannels(query) {
+                    if (!query.trim()) {
+                        renderChannels(allChannels);
+                        return;
+                    }
+
+                    const filtered = allChannels.filter(channel => {
+                        const nameMatch = channel.name.toLowerCase().includes(query.toLowerCase());
+                        const numMatch = channel.number.toLowerCase().includes(query.toLowerCase());
+                        return nameMatch || numMatch;
+                    });
+
+                    renderChannels(filtered);
+                }
+
+                function switchChannel(channelNumber, channelName) {
+                    const btn = event.target;
+                    btn.disabled = true;
+                    const originalText = btn.textContent;
+                    btn.textContent = '⏳ Switching...';
+
+                    fetch('/switch/' + encodeURIComponent(channelNumber))
+                        .then(response => response.json())
+                        .then(data => {
+                            if (data.status === 'success') {
+                                showNotification('Switched to ' + channelName, 'success');
+                                // Move selected channel to top
+                                moveChannelToTop(channelNumber);
+                            } else {
+                                showNotification('Failed to switch: ' + data.data.message, 'error');
+                            }
+                        })
+                        .catch(error => {
+                            console.error('Error:', error);
+                            showNotification('Switch failed', 'error');
+                        })
+                        .finally(() => {
+                            btn.disabled = false;
+                            btn.textContent = originalText;
+                        });
+                }
+
+                function moveChannelToTop(channelNumber) {
+                    // Find the channel
+                    const index = allChannels.findIndex(c => c.number === channelNumber);
+                    if (index === -1) return;
+
+                    // Remove from current position and insert at beginning
+                    const channel = allChannels.splice(index, 1)[0];
+                    allChannels.unshift(channel);
+
+                    // Re-render with current channel highlighted
+                    currentChannel = channelNumber;
+                    renderChannels(allChannels);
+                }
+
+                function renderChannels(channels) {
+                    const container = document.getElementById('channelsContainer');
+
+                    if (!channels || channels.length === 0) {
+                        container.innerHTML = `
+                            <div class="no-channels">
+                                <i>📺</i>
+                                <h3>No channels found</h3>
+                                <p>Try refreshing or check TV connection</p>
+                            </div>
+                        `;
+                        return;
+                    }
+
+                    let html = '';
+                    channels.forEach(channel => {
+                        const isCurrent = channel.number === currentChannel;
+                        const channelClass = 'channel-card' + (isCurrent ? ' current' : '');
+
+                        html += `
+                            <div class="${channelClass}" data-number="${channel.number}">
+                                <div class="channel-info">
+                                    <div class="channel-number">${channel.number || '---'}</div>
+                                    <div class="channel-name">${channel.name}</div>
+                                    <div class="channel-source">${channel.source || 'TV'}</div>
+                                </div>
+                                <button class="switch-btn"
+                                        onclick="switchChannel('${channel.number}', '${channel.name.replace(/'/g, "\\'")}')"
+                                        ${isCurrent ? 'disabled' : ''}>
+                                    ${isCurrent ? '📺 Current' : 'Switch'}
+                                </button>
+                            </div>
+                        `;
+                    });
+
+                    container.innerHTML = html;
+                }
+            </script>
         </body>
         </html>
         """
-
-        self.send_response(200)
-        self.send_header('Content-Type', 'text/html')
-        self.end_headers()
-        self.wfile.write(html.encode('utf-8'))
 
     def handle_list_channels(self, query):
         """Handle /list endpoint - return channel list from TV"""
@@ -613,7 +1169,9 @@ class TVRequestHandler(BaseHTTPRequestHandler):
         channels = self.tv.get_channels(force_refresh=refresh)
 
         if format_type == 'html':
-            self.send_html_channel_list(channels)
+            # For HTML format, generate a simple table (though main interface uses AJAX)
+            html = self._generate_simple_channel_list(channels)
+            self._send_html(html)
         else:
             self._send_response(200, {
                 'total': len(channels),
@@ -623,107 +1181,14 @@ class TVRequestHandler(BaseHTTPRequestHandler):
                 'last_updated': self.tv.channels_last_updated.isoformat() if self.tv.channels_last_updated else None
             })
 
-    def send_html_channel_list(self, channels):
-        """Send channel list as HTML table"""
-        html = """
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <title>TV Channels - Live from TV</title>
-            <style>
-                body { font-family: Arial, sans-serif; margin: 40px; }
-                h1 { color: #333; }
-                .info { background: #e3f2fd; padding: 10px; border-radius: 5px; margin-bottom: 20px; }
-                table { border-collapse: collapse; width: 100%; max-width: 800px; }
-                th, td { border: 1px solid #ddd; padding: 12px; text-align: left; }
-                th { background-color: #2196F3; color: white; }
-                tr:nth-child(even) { background-color: #f2f2f2; }
-                tr:hover { background-color: #e8f4f8; }
-                .channel-link {
-                    background: #4CAF50;
-                    color: white;
-                    padding: 5px 10px;
-                    text-decoration: none;
-                    border-radius: 3px;
-                    display: inline-block;
-                }
-                .channel-link:hover { background: #45a049; }
-                .refresh { margin-bottom: 20px; }
-                .refresh a { margin-right: 10px; }
-                .source-badge {
-                    background: #9e9e9e;
-                    color: white;
-                    padding: 2px 6px;
-                    border-radius: 3px;
-                    font-size: 0.8em;
-                }
-            </style>
-        </head>
-        <body>
-            <h1>📺 TV Channels - Live from Sony TV</h1>
-            <div class="info">
-                <strong>📡 Live Data:</strong> This list is fetched directly from your TV via its HTTP API
-            </div>
-            <div class="refresh">
-                <a href="/list?format=html&refresh=true">🔄 Refresh from TV</a>
-                <a href="/list?format=json">📋 JSON</a>
-                <a href="/refresh">🔄 Force Refresh</a>
-            </div>
-        """
-
-        if channels:
-            html += f"""
-            <p>Found <strong>{len(channels)}</strong> channels from your TV</p>
-            <table>
-                <tr>
-                    <th>Channel #</th>
-                    <th>Channel Name</th>
-                    <th>Source</th>
-                    <th>Action</th>
-                </tr>
-            """
-
-            for channel in sorted(channels, key=lambda x: x.get('number', '9999')):
-                channel_num = channel.get('number', '')
-                name = channel.get('name', 'Unknown')
-                source = channel.get('source', 'TV Tuner')
-
-                html += f"""
-                    <tr>
-                        <td>{channel_num}</td>
-                        <td>{name}</td>
-                        <td><span class="source-badge">{source}</span></td>
-                        <td><a href="/switch/{channel_num if channel_num else name}" class="channel-link">Switch</a></td>
-                    </tr>
-                """
-
-            html += "</table>"
-        else:
-            html += """
-            <div style="background: #ffebee; padding: 20px; border-radius: 5px;">
-                <strong>⚠️ No channels found</strong>
-                <p>Could not retrieve channels from your TV. This could be because:</p>
-                <ul>
-                    <li>TV is in standby mode</li>
-                    <li>TV tuner is not active</li>
-                    <li>Authentication issue</li>
-                </ul>
-                <p><a href="/refresh">Click here to try refreshing</a></p>
-            </div>
-            """
-
-        html += """
-            <p style="margin-top: 20px; color: #666;">
-                <em>Channel data retrieved directly from TV via HTTP API</em>
-            </p>
-        </body>
-        </html>
-        """
-
-        self.send_response(200)
-        self.send_header('Content-Type', 'text/html')
-        self.end_headers()
-        self.wfile.write(html.encode('utf-8'))
+    def _generate_simple_channel_list(self, channels):
+        """Generate a simple HTML channel list (fallback)"""
+        html = "<html><head><title>TV Channels</title></head><body>"
+        html += "<h1>TV Channels</h1><ul>"
+        for ch in channels:
+            html += f"<li>{ch.get('number')} - {ch.get('name')}</li>"
+        html += "</ul></body></html>"
+        return html
 
     def handle_switch_channel(self, channel):
         """Handle /switch/<channel> endpoint"""
@@ -774,8 +1239,19 @@ class TVRequestHandler(BaseHTTPRequestHandler):
         self._send_response(200, {
             'message': 'Channel list refreshed from TV',
             'total': len(channels),
-            'channels': channels[:10],  # Return first 10 as preview
+            'channels': channels,  # Return all channels for AJAX
             'total_found': len(channels)
+        })
+
+    def handle_channels_api(self, query):
+        """Handle /channels endpoint - AJAX API for channels"""
+        refresh = query.get('refresh', ['false'])[0].lower() == 'true'
+        channels = self.tv.get_channels(force_refresh=refresh)
+
+        self._send_response(200, {
+            'channels': channels,
+            'total': len(channels),
+            'last_updated': self.tv.channels_last_updated.isoformat() if self.tv.channels_last_updated else None
         })
 
     def log_message(self, format, *args):
@@ -824,7 +1300,7 @@ host = "0.0.0.0"
     )
 
     print("\n" + "="*70)
-    print("📺 SONY TV WEB SERVICE - Live Channel Data")
+    print("📺 SONY TV WEB SERVICE - Live Channel Data with AJAX")
     print("="*70)
 
     print(f"\n📡 Testing connection to TV at {tv.ip_address}...")
@@ -851,12 +1327,11 @@ host = "0.0.0.0"
 
     print(f"\n🌐 Web service running at:")
     print(f"   http://{host if host != '0.0.0.0' else 'localhost'}:{port}/")
-    print(f"\n📋 Available endpoints (live TV data):")
-    print(f"   GET /              - API documentation")
-    print(f"   GET /list          - List all channels (from TV)")
-    print(f"   GET /refresh       - Force refresh channel list")
-    print(f"   GET /switch/101    - Switch to channel 101")
-    print(f"   GET /status        - TV & channel status")
+    print(f"\n📋 AJAX-enabled interface with:")
+    print(f"   - Live channel switching")
+    print(f"   - Selected channel moves to top")
+    print(f"   - Search/filter channels")
+    print(f"   - Real-time status updates")
     print(f"\n🛑 Press Ctrl+C to stop")
     print("="*70)
 
