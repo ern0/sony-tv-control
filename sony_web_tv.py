@@ -3,20 +3,21 @@
 Sony TV Web Service
 Provides REST API endpoints to control Sony Bravia TV
 Gets channel list directly from TV via HTTP API
-Includes AJAX interface with channel switching and reordering
+Includes AJAX interface with channel switching and volume control
 """
 
 import json
 import tomllib
 import logging
-from typing import Dict, List, Optional, Any, Union
+from typing import Dict, List, Optional, Any
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from urllib.parse import urlparse, parse_qs
 from urllib.request import Request, urlopen
 from urllib.error import URLError, HTTPError
 import socket
-from datetime import datetime, timedelta
+from datetime import datetime
 import re
+import os
 
 # Configure logging
 logging.basicConfig(
@@ -33,7 +34,7 @@ class SonyTVController:
         self.access_code = access_code
         self.timeout = timeout
         self.base_url = f"http://{ip_address}/sony"
-        self.channels = []  # Will be populated from TV
+        self.channels = []
         self.channels_last_updated = None
         self.channels_cache_duration = 300  # 5 minutes cache
 
@@ -65,20 +66,8 @@ class SonyTVController:
                 result = json.loads(response_data)
                 logger.debug(f"Response: {result}")
                 return result
-        except HTTPError as e:
-            logger.error(f"HTTP Error {e.code}: {e.reason}")
-            return None
-        except URLError as e:
-            logger.error(f"URL Error: {e.reason}")
-            return None
-        except socket.timeout:
-            logger.error("Request timeout")
-            return None
-        except json.JSONDecodeError as e:
-            logger.error(f"JSON decode error: {e}")
-            return None
-        except Exception as e:
-            logger.error(f"Unexpected error: {e}")
+        except (HTTPError, URLError, socket.timeout, json.JSONDecodeError, Exception) as e:
+            logger.error(f"Request error: {e}")
             return None
 
     def check_connection(self) -> bool:
@@ -93,61 +82,137 @@ class SonyTVController:
             return result["result"][0].get("status", "unknown")
         return "unknown"
 
+    def power_on(self) -> bool:
+        """Turn on the TV"""
+        logger.info("Attempting to turn TV on")
+        result = self._make_request(
+            "system",
+            "setPowerStatus",
+            params=[{"status": True}],
+            version="1.0"
+        )
+        return result is not None and "result" in result
+
+    def power_off(self) -> bool:
+        """Turn off the TV"""
+        logger.info("Attempting to turn TV off")
+        result = self._make_request(
+            "system",
+            "setPowerStatus",
+            params=[{"status": False}],
+            version="1.0"
+        )
+        return result is not None and "result" in result
+
+    def volume_up(self) -> bool:
+        """Increase volume"""
+        logger.info("Volume up")
+        result = self._make_request(
+            "audio",
+            "setAudioVolume",
+            params=[{"target": "speaker", "volume": "+1"}],
+            version="1.0"
+        )
+        return result is not None and "result" in result
+
+    def volume_down(self) -> bool:
+        """Decrease volume"""
+        logger.info("Volume down")
+        result = self._make_request(
+            "audio",
+            "setAudioVolume",
+            params=[{"target": "speaker", "volume": "-1"}],
+            version="1.0"
+        )
+        return result is not None and "result" in result
+
+    def volume_set(self, level: int) -> bool:
+        """Set volume to specific level (0-100)"""
+        logger.info(f"Setting volume to {level}")
+        result = self._make_request(
+            "audio",
+            "setAudioVolume",
+            params=[{"target": "speaker", "volume": str(level)}],
+            version="1.0"
+        )
+        return result is not None and "result" in result
+
+    def get_volume(self) -> Optional[int]:
+        """Get current volume level"""
+        result = self._make_request("audio", "getVolumeInformation")
+        if result and "result" in result:
+            for target in result["result"]:
+                if isinstance(target, list) and len(target) > 0:
+                    for vol_info in target:
+                        if vol_info.get("target") == "speaker":
+                            return vol_info.get("volume")
+        return None
+
+    def mute(self) -> bool:
+        """Mute/unmute audio"""
+        logger.info("Toggling mute")
+        result = self._make_request(
+            "audio",
+            "setAudioMute",
+            params=[{"status": True}],
+            version="1.0"
+        )
+        return result is not None and "result" in result
+
+    def unmute(self) -> bool:
+        """Unmute audio"""
+        logger.info("Unmuting")
+        result = self._make_request(
+            "audio",
+            "setAudioMute",
+            params=[{"status": False}],
+            version="1.0"
+        )
+        return result is not None and "result" in result
+
+    def get_mute_status(self) -> Optional[bool]:
+        """Get mute status"""
+        result = self._make_request("audio", "getVolumeInformation")
+        if result and "result" in result:
+            for target in result["result"]:
+                if isinstance(target, list) and len(target) > 0:
+                    for vol_info in target:
+                        if vol_info.get("target") == "speaker":
+                            return vol_info.get("mute", False)
+        return None
+
     def fetch_channels_from_tv(self) -> List[Dict]:
-        """
-        Fetch channels directly from TV using the 3-step API process
-        This is the key method that gets real channel data from the TV
-        """
+        """Fetch channels directly from TV using the API"""
         logger.info("Fetching channels directly from TV...")
         all_channels = []
 
-        # Step 1: Get available schemes
-        logger.debug("Step 1: Getting scheme list")
+        # Get available schemes
         schemes_result = self._make_request("avContent", "getSchemeList")
-
         if not schemes_result or "result" not in schemes_result:
-            logger.error("Failed to get scheme list")
             return []
 
-        # Handle the actual response format
         schemes_data = schemes_result["result"]
-        logger.debug(f"Raw schemes data: {schemes_data}")
-
         schemes = []
         if schemes_data and len(schemes_data) > 0:
             first_item = schemes_data[0]
             if isinstance(first_item, list):
-                # Format: [["tv", "extInput", ...]]
                 schemes = first_item
             elif isinstance(first_item, str):
-                # Format: ["tv", "extInput", ...]
                 schemes = schemes_data
-            else:
-                logger.warning(f"Unexpected scheme format: {type(first_item)}")
-
-        logger.info(f"Found schemes: {schemes}")
 
         # Look for TV-related schemes
-        tv_keywords = ['tv', 'tuner', 'digital', 'dtv', 'dvbt', 'dvbc', 'dvbs', 'atsc', 'isdb']
+        tv_keywords = ['tv', 'tuner', 'digital', 'dtv', 'dvbt', 'dvbc', 'dvbs']
         tv_schemes = []
 
         for scheme in schemes:
-            if isinstance(scheme, str):
-                if any(kw in scheme.lower() for kw in tv_keywords):
-                    tv_schemes.append(scheme)
-            elif isinstance(scheme, dict):
-                # Handle if scheme is a dict with 'name' or similar
-                scheme_name = scheme.get('name') or scheme.get('scheme') or str(scheme)
-                if any(kw in scheme_name.lower() for kw in tv_keywords):
-                    tv_schemes.append(scheme_name)
+            if isinstance(scheme, str) and any(kw in scheme.lower() for kw in tv_keywords):
+                tv_schemes.append(scheme)
 
         if not tv_schemes:
-            logger.warning("No TV schemes found, trying common scheme names")
-            tv_schemes = ['tv', 'digital', 'tuner']  # Try common names
+            tv_schemes = ['tv', 'digital', 'tuner']
 
-        # Step 2: Get sources for each TV scheme
+        # Get channels from each scheme
         for scheme in tv_schemes:
-            logger.debug(f"Step 2: Getting sources for scheme: {scheme}")
             sources_result = self._make_request(
                 "avContent",
                 "getSourceList",
@@ -157,23 +222,17 @@ class SonyTVController:
             if not sources_result or "result" not in sources_result:
                 continue
 
-            # Handle the actual response format for sources
             sources_data = sources_result["result"]
             sources = []
 
             if sources_data and len(sources_data) > 0:
                 first_item = sources_data[0]
                 if isinstance(first_item, list):
-                    # Format: [[{"source": "tv:dvbt", ...}]]
                     sources = first_item
                 elif isinstance(first_item, dict):
-                    # Format: [{"source": "tv:dvbt", ...}]
                     sources = sources_data
-                else:
-                    logger.warning(f"Unexpected sources format: {type(first_item)}")
 
             for source in sources:
-                # Extract source URI - can be in different fields
                 source_uri = None
                 source_title = scheme
 
@@ -186,16 +245,8 @@ class SonyTVController:
                 if not source_uri:
                     continue
 
-                logger.info(f"Found source: {source_title} - {source_uri}")
-
-                # Step 3: Get channels from this source
-                channels_from_source = self._fetch_channels_from_source(source_uri, source_title)
-                all_channels.extend(channels_from_source)
-
-        # If no channels found with standard method, try direct approach
-        if not all_channels:
-            logger.info("No channels found with standard method, trying direct approach")
-            all_channels = self._fetch_channels_direct()
+                channels = self._fetch_channels_from_source(source_uri, source_title)
+                all_channels.extend(channels)
 
         logger.info(f"Total channels found: {len(all_channels)}")
         return all_channels
@@ -204,134 +255,24 @@ class SonyTVController:
         """Fetch channels from a specific source URI"""
         channels = []
 
-        # Try different tuner variations
         uris_to_try = [source_uri]
-
-        # Some TVs need tuner parameter
         if '?' not in source_uri:
-            for tuner in range(0, 4):  # Try tuners 0-3
+            for tuner in range(0, 2):
                 uris_to_try.append(f"{source_uri}?tuner={tuner}")
 
         for uri in uris_to_try:
-            logger.debug(f"Getting content list for {uri}")
-
-            # Try with pagination
-            for start_idx in range(0, 200, 50):  # Get up to 200 channels
+            for start_idx in range(0, 200, 50):
                 content_result = self._make_request(
                     "avContent",
                     "getContentList",
-                    params=[{
-                        "uri": uri,
-                        "stIdx": start_idx,
-                        "cnt": 50
-                    }],
-                    version="1.5"  # Use version 1.5 for channel info
+                    params=[{"uri": uri, "stIdx": start_idx, "cnt": 50}],
+                    version="1.5"
                 )
 
                 if not content_result or "result" not in content_result:
                     continue
 
-                # Handle the actual response format for content
                 content_data = content_result["result"]
-                items = []
-
-                if content_data and len(content_data) > 0:
-                    first_item = content_data[0]
-                    if isinstance(first_item, list):
-                        # Format: [[{channel1}, {channel2}]]
-                        items = first_item
-                    elif isinstance(first_item, dict):
-                        # Format: [{channel1}, {channel2}]
-                        items = content_data
-
-                for item in items:
-                    if not isinstance(item, dict):
-                        continue
-
-                    # Determine if this is a TV channel
-                    is_tv_channel = self._is_tv_channel(item)
-
-                    if is_tv_channel:
-                        channel = {
-                            'number': item.get('index', ''),
-                            'name': item.get('title', 'Unknown'),
-                            'uri': item.get('uri', ''),
-                            'source': source_title,
-                            'source_uri': source_uri
-                        }
-
-                        # Only add if not duplicate
-                        if not any(c['uri'] == channel['uri'] for c in channels):
-                            channels.append(channel)
-                            logger.debug(f"Found channel: {channel.get('number')} - {channel.get('name')}")
-
-                # If we got fewer items than requested, we've reached the end
-                if len(items) < 50:
-                    break
-
-        return channels
-
-    def _is_tv_channel(self, item: Dict) -> bool:
-        """Determine if an item is a TV channel"""
-        # Check by media type
-        if item.get('programMediaType') == 'tv':
-            return True
-
-        # Check by URI patterns
-        uri_str = item.get('uri', '').lower()
-        if any(pattern in uri_str for pattern in ['sid=', 'channel=', 'program=', 'aid=']):
-            return True
-
-        # Check by title patterns (often have numbers or common channel names)
-        title = item.get('title', '')
-        if title and len(title) > 1:
-            # Channels often have numbers or are common names
-            if any(word in title.lower() for word in
-                  ['bbc', 'itv', 'channel', 'tv', 'hd', 'news', 'sport', 'radio', 'cbs', 'nbc', 'abc', 'fox']):
-                return True
-
-            # Check if title contains numbers (like "BBC One" or "Channel 4")
-            if re.search(r'\d', title):
-                return True
-
-        return False
-
-    def _fetch_channels_direct(self) -> List[Dict]:
-        """Fallback method: Try direct common URIs"""
-        channels = []
-
-        # Common URI patterns for different regions
-        common_uris = [
-            "tv:dvbt?tuner=1",
-            "tv:dvbt?tuner=0",
-            "tv:dvbc?tuner=1",
-            "tv:dvbc?tuner=0",
-            "tv:dvbs?tuner=1",
-            "tv:dvbs?tuner=0",
-            "tv:atsc?tuner=1",
-            "tv:atsc?tuner=0",
-            "tv:isdb?tuner=1",
-            "tv:digital?tuner=1",
-            "tv:tuner?index=0",
-            "tv:0",
-            "tv:1",
-            "tv:dvbt",
-            "tv:dvbc",
-            "tv:dvbs"
-        ]
-
-        for uri in common_uris:
-            logger.debug(f"Trying direct URI: {uri}")
-
-            result = self._make_request(
-                "avContent",
-                "getContentList",
-                params=[{"uri": uri, "stIdx": 0, "cnt": 100}],
-                version="1.5"
-            )
-
-            if result and "result" in result:
-                content_data = result["result"]
                 items = []
 
                 if content_data and len(content_data) > 0:
@@ -346,40 +287,46 @@ class SonyTVController:
                         continue
 
                     if self._is_tv_channel(item):
-                        channels.append({
-                            'number': item.get('channelNumber', ''),
+                        channel = {
+                            'number': item.get('index', ''),
                             'name': item.get('title', 'Unknown'),
                             'uri': item.get('uri', ''),
-                            'source': 'direct',
-                            'source_uri': uri
-                        })
+                            'source': source_title
+                        }
 
-                if channels:
-                    logger.info(f"Found {len(channels)} channels via direct URI {uri}")
-                    break  # Stop if we found channels
+                        if not any(c['uri'] == channel['uri'] for c in channels):
+                            channels.append(channel)
+
+                if len(items) < 50:
+                    break
 
         return channels
 
+    def _is_tv_channel(self, item: Dict) -> bool:
+        """Determine if an item is a TV channel"""
+        if item.get('programMediaType') == 'tv':
+            return True
+
+        uri_str = item.get('uri', '').lower()
+        if any(pattern in uri_str for pattern in ['sid=', 'channel=', 'program=']):
+            return True
+
+        title = item.get('title', '')
+        if title and len(title) > 1:
+            if any(word in title.lower() for word in
+                  ['bbc', 'itv', 'channel', 'tv', 'hd', 'news', 'cbs', 'nbc', 'abc', 'fox']):
+                return True
+            if re.search(r'\d', title):
+                return True
+
+        return False
+
     def get_channels(self, force_refresh: bool = False) -> List[Dict]:
-        """
-        Get channels with caching
-        If cache is expired or force_refresh is True, fetch from TV
-        """
-        cache_valid = False
-
-        if self.channels_last_updated and not force_refresh:
-            cache_age = (datetime.now() - self.channels_last_updated).total_seconds()
-            cache_valid = cache_age < self.channels_cache_duration
-
-            if cache_valid:
-                logger.info(f"Using cached channels (age: {cache_age:.0f}s)")
-
-        if not cache_valid or force_refresh:
-            logger.info("Cache expired or refresh forced, fetching from TV")
+        """Get channels with caching"""
+        if force_refresh or not self.channels_last_updated:
+            logger.info("Fetching channels from TV")
             self.channels = self.fetch_channels_from_tv()
             self.channels_last_updated = datetime.now()
-
-            # Sort channels by number for consistency
             self.channels.sort(key=lambda x: self._extract_channel_number(x))
 
         return self.channels
@@ -393,28 +340,22 @@ class SonyTVController:
             except ValueError:
                 pass
 
-        # Try to extract from name
         numbers = re.findall(r'\d+', channel.get('name', ''))
         return int(numbers[0]) if numbers else 9999
 
     def switch_to_channel(self, channel_identifier: str) -> bool:
-        """
-        Switch to a specific channel by number or name
-        Uses the channel URI from TV data
-        """
-        logger.info(f"Attempting to switch to channel: {channel_identifier}")
+        """Switch to a specific channel by number or name"""
+        logger.info(f"Switching to channel: {channel_identifier}")
 
-        # Get fresh channels if needed
         channels = self.get_channels()
 
-        # Try to find channel by number
+        # Find channel by number or name
         target_channel = None
         for channel in channels:
             if str(channel.get('number')) == str(channel_identifier):
                 target_channel = channel
                 break
 
-        # If not found by number, try by name (case-insensitive partial match)
         if not target_channel:
             channel_id_lower = channel_identifier.lower()
             for channel in channels:
@@ -426,13 +367,9 @@ class SonyTVController:
             logger.warning(f"Channel '{channel_identifier}' not found")
             return False
 
-        # Switch to channel using setPlayContent
         uri = target_channel.get('uri')
         if not uri:
-            logger.error("Channel has no URI")
             return False
-
-        logger.info(f"Switching to {target_channel.get('name')} (URI: {uri})")
 
         result = self._make_request(
             "avContent",
@@ -441,39 +378,39 @@ class SonyTVController:
             version="1.0"
         )
 
-        success = result is not None and "result" in result
-        if success:
-            logger.info(f"Successfully switched to {target_channel.get('name')}")
-        else:
-            logger.error("Failed to switch channel")
-
-        return success
+        return result is not None and "result" in result
 
 
 class TVRequestHandler(BaseHTTPRequestHandler):
     """HTTP request handler for TV web service"""
 
     def __init__(self, *args, **kwargs):
-        # These will be set after loading config
         self.tv = None
+        self.html_content = None
         super().__init__(*args, **kwargs)
 
-    def load_config(self):
-        """Load configuration from tv.toml"""
+    def load_config_and_html(self):
+        """Load configuration and HTML template"""
         try:
+            # Load config
             with open('tv.toml', 'rb') as f:
                 config = tomllib.load(f)
 
             tv_config = config.get('tv', {})
-
             self.tv = SonyTVController(
                 ip_address=tv_config.get('ip_address', '192.168.1.100'),
                 access_code=tv_config.get('access_code', ''),
                 timeout=tv_config.get('timeout', 5)
             )
+
+            # Load HTML template
+            html_path = os.path.join(os.path.dirname(__file__), 'tv_remote.html')
+            with open(html_path, 'r', encoding='utf-8') as f:
+                self.html_content = f.read()
+
             return True
-        except FileNotFoundError:
-            logger.error("tv.toml configuration file not found")
+        except FileNotFoundError as e:
+            logger.error(f"File not found: {e}")
             return False
         except Exception as e:
             logger.error(f"Error loading config: {e}")
@@ -498,753 +435,57 @@ class TVRequestHandler(BaseHTTPRequestHandler):
         """Send error response"""
         self._send_response(status_code, {'message': message})
 
-    def _send_html(self, html: str):
+    def _send_html(self):
         """Send HTML response"""
         self.send_response(200)
         self.send_header('Content-Type', 'text/html')
         self.end_headers()
+
+        # Replace placeholder with actual TV IP
+        html = self.html_content.replace('{{TV_IP}}', self.tv.ip_address)
         self.wfile.write(html.encode('utf-8'))
 
     def do_GET(self):
         """Handle GET requests"""
-        # Load config for each request
-        if not self.load_config():
-            self._send_error(500, "Configuration not loaded")
+        if not self.load_config_and_html():
+            self._send_error(500, "Configuration or HTML template not loaded")
             return
 
-        # Parse URL
         parsed_url = urlparse(self.path)
         path = parsed_url.path
         query = parse_qs(parsed_url.query)
 
-        # Route requests
+        # API endpoints
         if path == '/':
-            self.handle_root()
-        elif path == '/list':
-            self.handle_list_channels(query)
-        elif path.startswith('/switch/'):
-            channel = path.replace('/switch/', '')
+            self._send_html()
+        elif path == '/api/channels':
+            self.handle_get_channels(query)
+        elif path == '/api/status':
+            self.handle_get_status()
+        elif path == '/api/volume':
+            self.handle_get_volume()
+        elif path.startswith('/api/switch/'):
+            channel = path.replace('/api/switch/', '')
             self.handle_switch_channel(channel)
-        elif path == '/status':
-            self.handle_status()
-        elif path == '/power':
-            self.handle_power()
-        elif path == '/refresh':
+        elif path == '/api/power/on':
+            self.handle_power_on()
+        elif path == '/api/power/off':
+            self.handle_power_off()
+        elif path == '/api/volume/up':
+            self.handle_volume_up()
+        elif path == '/api/volume/down':
+            self.handle_volume_down()
+        elif path == '/api/volume/mute':
+            self.handle_volume_mute()
+        elif path == '/api/volume/unmute':
+            self.handle_volume_unmute()
+        elif path == '/api/refresh':
             self.handle_refresh_channels()
-        elif path == '/channels':
-            self.handle_channels_api(query)
         else:
             self._send_error(404, f"Endpoint not found: {path}")
 
-    def handle_root(self):
-        """Handle root endpoint - Main HTML interface with AJAX"""
-        html = self._generate_main_html()
-        self._send_html(html)
-
-    def _generate_main_html(self) -> str:
-        """Generate the main HTML page with AJAX functionality"""
-        return """
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <title>Sony TV Remote</title>
-            <meta charset="UTF-8">
-            <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <style>
-                * {
-                    box-sizing: border-box;
-                    margin: 0;
-                    padding: 0;
-                }
-
-                body {
-                    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
-                    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-                    min-height: 100vh;
-                    padding: 20px;
-                }
-
-                .container {
-                    max-width: 1200px;
-                    margin: 0 auto;
-                    background: white;
-                    border-radius: 20px;
-                    box-shadow: 0 20px 60px rgba(0,0,0,0.3);
-                    overflow: hidden;
-                }
-
-                .header {
-                    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-                    color: white;
-                    padding: 30px;
-                    text-align: center;
-                }
-
-                .header h1 {
-                    font-size: 2.5em;
-                    margin-bottom: 10px;
-                }
-
-                .header p {
-                    opacity: 0.9;
-                    font-size: 1.1em;
-                }
-
-                .status-bar {
-                    background: #f8f9fa;
-                    padding: 15px 30px;
-                    border-bottom: 1px solid #e9ecef;
-                    display: flex;
-                    align-items: center;
-                    gap: 20px;
-                    flex-wrap: wrap;
-                }
-
-                .status-item {
-                    display: flex;
-                    align-items: center;
-                    gap: 8px;
-                }
-
-                .status-label {
-                    font-weight: 600;
-                    color: #495057;
-                }
-
-                .status-value {
-                    color: #212529;
-                }
-
-                .status-dot {
-                    width: 12px;
-                    height: 12px;
-                    border-radius: 50%;
-                    display: inline-block;
-                }
-
-                .dot-connected {
-                    background: #28a745;
-                    box-shadow: 0 0 10px #28a745;
-                }
-
-                .dot-disconnected {
-                    background: #dc3545;
-                }
-
-                .channel-count {
-                    background: #007bff;
-                    color: white;
-                    padding: 4px 12px;
-                    border-radius: 20px;
-                    font-size: 0.9em;
-                    margin-left: auto;
-                }
-
-                .search-section {
-                    padding: 20px 30px;
-                    background: white;
-                    border-bottom: 1px solid #e9ecef;
-                }
-
-                .search-box {
-                    width: 100%;
-                    padding: 12px 20px;
-                    font-size: 1em;
-                    border: 2px solid #e9ecef;
-                    border-radius: 10px;
-                    transition: border-color 0.3s;
-                }
-
-                .search-box:focus {
-                    outline: none;
-                    border-color: #667eea;
-                }
-
-                .channels-section {
-                    padding: 0 30px 30px 30px;
-                    background: white;
-                }
-
-                .channels-header {
-                    display: flex;
-                    justify-content: space-between;
-                    align-items: center;
-                    margin-bottom: 20px;
-                    padding-top: 20px;
-                }
-
-                .channels-title {
-                    font-size: 1.5em;
-                    color: #333;
-                }
-
-                .refresh-btn {
-                    background: #28a745;
-                    color: white;
-                    border: none;
-                    padding: 10px 20px;
-                    border-radius: 8px;
-                    cursor: pointer;
-                    font-size: 0.9em;
-                    display: flex;
-                    align-items: center;
-                    gap: 5px;
-                    transition: background 0.3s;
-                }
-
-                .refresh-btn:hover {
-                    background: #218838;
-                }
-
-                .refresh-btn:disabled {
-                    background: #6c757d;
-                    cursor: not-allowed;
-                }
-
-                .channels-grid {
-                    display: grid;
-                    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-                    gap: 15px;
-                    max-height: 600px;
-                    overflow-y: auto;
-                    padding: 5px;
-                }
-
-                .channel-card {
-                    background: #f8f9fa;
-                    border-radius: 10px;
-                    padding: 15px;
-                    display: flex;
-                    justify-content: space-between;
-                    align-items: center;
-                    transition: all 0.3s;
-                    border: 2px solid transparent;
-                    animation: fadeIn 0.5s ease-out;
-                }
-
-                .channel-card:hover {
-                    transform: translateY(-2px);
-                    box-shadow: 0 5px 15px rgba(0,0,0,0.1);
-                    border-color: #667eea;
-                }
-
-                .channel-card.current {
-                    background: linear-gradient(135deg, #667eea20 0%, #764ba220 100%);
-                    border-color: #667eea;
-                    order: -1;
-                }
-
-                @keyframes fadeIn {
-                    from {
-                        opacity: 0;
-                        transform: translateY(10px);
-                    }
-                    to {
-                        opacity: 1;
-                        transform: translateY(0);
-                    }
-                }
-
-                .channel-info {
-                    flex: 1;
-                }
-
-                .channel-number {
-                    font-size: 1.2em;
-                    font-weight: bold;
-                    color: #667eea;
-                }
-
-                .channel-name {
-                    font-size: 1.1em;
-                    color: #333;
-                    margin-top: 4px;
-                }
-
-                .channel-source {
-                    font-size: 0.8em;
-                    color: #6c757d;
-                    margin-top: 4px;
-                }
-
-                .switch-btn {
-                    background: #007bff;
-                    color: white;
-                    border: none;
-                    padding: 8px 16px;
-                    border-radius: 6px;
-                    cursor: pointer;
-                    font-size: 0.9em;
-                    transition: background 0.3s;
-                    margin-left: 10px;
-                }
-
-                .switch-btn:hover {
-                    background: #0056b3;
-                }
-
-                .switch-btn:disabled {
-                    background: #6c757d;
-                    cursor: not-allowed;
-                }
-
-                .loading {
-                    text-align: center;
-                    padding: 40px;
-                    color: #6c757d;
-                }
-
-                .loading-spinner {
-                    border: 4px solid #f3f3f3;
-                    border-top: 4px solid #667eea;
-                    border-radius: 50%;
-                    width: 40px;
-                    height: 40px;
-                    animation: spin 1s linear infinite;
-                    margin: 0 auto 20px;
-                }
-
-                @keyframes spin {
-                    0% { transform: rotate(0deg); }
-                    100% { transform: rotate(360deg); }
-                }
-
-                .error-message {
-                    background: #f8d7da;
-                    color: #721c24;
-                    padding: 15px;
-                    border-radius: 8px;
-                    margin: 20px 0;
-                }
-
-                .success-message {
-                    background: #d4edda;
-                    color: #155724;
-                    padding: 10px 15px;
-                    border-radius: 8px;
-                    margin: 10px 0;
-                    animation: slideIn 0.3s ease-out;
-                }
-
-                @keyframes slideIn {
-                    from {
-                        transform: translateY(-20px);
-                        opacity: 0;
-                    }
-                    to {
-                        transform: translateY(0);
-                        opacity: 1;
-                    }
-                }
-
-                .notification {
-                    position: fixed;
-                    top: 20px;
-                    right: 20px;
-                    padding: 15px 20px;
-                    border-radius: 8px;
-                    color: white;
-                    animation: slideInRight 0.3s ease-out;
-                    z-index: 1000;
-                }
-
-                @keyframes slideInRight {
-                    from {
-                        transform: translateX(100%);
-                        opacity: 0;
-                    }
-                    to {
-                        transform: translateX(0);
-                        opacity: 1;
-                    }
-                }
-
-                .notification.success {
-                    background: #28a745;
-                }
-
-                .notification.error {
-                    background: #dc3545;
-                }
-
-                .notification.info {
-                    background: #17a2b8;
-                }
-
-                .stats {
-                    display: flex;
-                    gap: 10px;
-                    align-items: center;
-                }
-
-                .last-updated {
-                    font-size: 0.9em;
-                    color: #6c757d;
-                }
-
-                .no-channels {
-                    text-align: center;
-                    padding: 60px;
-                    color: #6c757d;
-                }
-
-                .no-channels i {
-                    font-size: 4em;
-                    margin-bottom: 20px;
-                    display: block;
-                }
-            </style>
-        </head>
-        <body>
-            <div class="container">
-                <div class="header">
-                    <h1>📺 Sony TV Remote</h1>
-                    <p>Control your TV with live channel data</p>
-                </div>
-
-                <div class="status-bar" id="statusBar">
-                    <div class="status-item">
-                        <span class="status-label">Status:</span>
-                        <span class="status-dot" id="connectionDot"></span>
-                        <span class="status-value" id="connectionStatus">Checking...</span>
-                    </div>
-                    <div class="status-item">
-                        <span class="status-label">Power:</span>
-                        <span class="status-value" id="powerStatus">Unknown</span>
-                    </div>
-                    <div class="status-item">
-                        <span class="status-label">TV IP:</span>
-                        <span class="status-value" id="tvIp">""" + self.tv.ip_address + """</span>
-                    </div>
-                    <div class="channel-count" id="channelCount">0 channels</div>
-                </div>
-
-                <div class="search-section">
-                    <input type="text" class="search-box" id="searchBox" placeholder="🔍 Search channels by name or number...">
-                </div>
-
-                <div class="channels-section">
-                    <div class="channels-header">
-                        <h2 class="channels-title">TV Channels</h2>
-                        <div class="stats">
-                            <span class="last-updated" id="lastUpdated"></span>
-                            <button class="refresh-btn" id="refreshBtn" onclick="refreshChannels()">
-                                🔄 Refresh
-                            </button>
-                        </div>
-                    </div>
-
-                    <div id="channelsContainer" class="channels-grid">
-                        <div class="loading">
-                            <div class="loading-spinner"></div>
-                            Loading channels from TV...
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <div id="notification" style="display: none;"></div>
-
-            <script>
-                // Pure JavaScript - No external libraries
-                let currentChannel = null;
-                let allChannels = [];
-                let searchTimeout = null;
-
-                // Load channels on page load
-                document.addEventListener('DOMContentLoaded', function() {
-                    loadChannels();
-                    loadStatus();
-
-                    // Set up search with debounce
-                    document.getElementById('searchBox').addEventListener('input', function(e) {
-                        clearTimeout(searchTimeout);
-                        searchTimeout = setTimeout(() => {
-                            filterChannels(e.target.value);
-                        }, 300);
-                    });
-
-                    // Auto-refresh status every 30 seconds
-                    setInterval(loadStatus, 30000);
-                });
-
-                function showNotification(message, type) {
-                    const notification = document.getElementById('notification');
-                    notification.style.display = 'block';
-                    notification.className = 'notification ' + type;
-                    notification.textContent = message;
-
-                    setTimeout(() => {
-                        notification.style.display = 'none';
-                    }, 3000);
-                }
-
-                function loadStatus() {
-                    fetch('/status')
-                        .then(response => response.json())
-                        .then(data => {
-                            const connected = data.data.connected;
-                            const dot = document.getElementById('connectionDot');
-                            const status = document.getElementById('connectionStatus');
-                            const power = document.getElementById('powerStatus');
-
-                            dot.className = 'status-dot ' + (connected ? 'dot-connected' : 'dot-disconnected');
-                            status.textContent = connected ? 'Connected' : 'Disconnected';
-                            power.textContent = data.data.power || 'Unknown';
-
-                            if (data.data.channels) {
-                                document.getElementById('channelCount').textContent =
-                                    data.data.channels.total + ' channels';
-
-                                if (data.data.channels.last_updated) {
-                                    const updated = new Date(data.data.channels.last_updated);
-                                    document.getElementById('lastUpdated').textContent =
-                                        'Updated: ' + updated.toLocaleTimeString();
-                                }
-                            }
-                        })
-                        .catch(error => {
-                            console.error('Status error:', error);
-                        });
-                }
-
-                function loadChannels() {
-                    fetch('/channels')
-                        .then(response => response.json())
-                        .then(data => {
-                            if (data.status == 'success') {
-                                allChannels = data.data.channels;
-                                renderChannels(allChannels);
-                                document.getElementById('channelCount').textContent =
-                                    allChannels.length + ' channels';
-                            } else {
-                                showNotification('Failed to load channels', 'error');
-                            }
-                        })
-                        .catch(error => {
-                            console.error('Error:', error);
-                            document.getElementById('channelsContainer').innerHTML =
-                                '<div class="error-message">Failed to load channels. Check connection.</div>';
-                        });
-                }
-
-                function refreshChannels() {
-                    const btn = document.getElementById('refreshBtn');
-                    btn.disabled = true;
-                    btn.innerHTML = '🔄 Refreshing...';
-
-                    document.getElementById('channelsContainer').innerHTML = `
-                        <div class="loading">
-                            <div class="loading-spinner"></div>
-                            Refreshing channels from TV...
-                        </div>
-                    `;
-
-                    fetch('/refresh')
-                        .then(response => response.json())
-                        .then(data => {
-                            if (data.status == 'success') {
-                                allChannels = data.data.channels;
-                                renderChannels(allChannels);
-                                showNotification('Channels refreshed!', 'success');
-                                loadStatus();
-                            } else {
-                                showNotification('Refresh failed', 'error');
-                            }
-                        })
-                        .catch(error => {
-                            console.error('Error:', error);
-                            showNotification('Refresh failed', 'error');
-                        })
-                        .finally(() => {
-                            btn.disabled = false;
-                            btn.innerHTML = '🔄 Refresh';
-                        });
-                }
-
-                function filterChannels(query) {
-                    if (!query.trim()) {
-                        renderChannels(allChannels);
-                        return;
-                    }
-
-                    const filtered = allChannels.filter(channel => {
-                        const nameMatch = channel.name.toLowerCase().includes(query.toLowerCase());
-                        const numMatch = channel.number.toLowerCase().includes(query.toLowerCase());
-                        return nameMatch || numMatch;
-                    });
-
-                    renderChannels(filtered);
-                }
-
-                function switchChannel(channelNumber, channelName) {
-                    const btn = event.target;
-                    btn.disabled = true;
-                    const originalText = btn.textContent;
-                    btn.textContent = '⏳ Switching...';
-
-                    fetch('/switch/' + encodeURIComponent(channelNumber))
-                        .then(response => response.json())
-                        .then(data => {
-                            if (data.status == 'success') {
-                                showNotification('Switched to ' + channelName, 'success');
-                                // Move selected channel to top
-                                moveChannelToTop(channelNumber);
-                            } else {
-                                showNotification('Failed to switch: ' + data.data.message, 'error');
-                            }
-                        })
-                        .catch(error => {
-                            console.error('Error:', error);
-                            showNotification('Switch failed', 'error');
-                        })
-                        .finally(() => {
-                            btn.disabled = false;
-                            btn.textContent = originalText;
-                        });
-                }
-
-                function moveChannelToTop(channelNumber) {
-                    // Find the channel
-                    const index = allChannels.findIndex(c => c.number == channelNumber);
-                    if (index == -1) return;
-
-                    // Remove from current position and insert at beginning
-                    const channel = allChannels.splice(index, 1)[0];
-                    allChannels.unshift(channel);
-
-                    // Re-render with current channel highlighted
-                    currentChannel = channelNumber;
-                    renderChannels(allChannels);
-                }
-
-                function renderChannels(channels) {
-                    const container = document.getElementById('channelsContainer');
-
-                    if (!channels || channels.length == 0) {
-                        container.innerHTML = `
-                            <div class="no-channels">
-                                <i>📺</i>
-                                <h3>No channels found</h3>
-                                <p>Try refreshing or check TV connection</p>
-                            </div>
-                        `;
-                        return;
-                    }
-
-                    let html = '';
-                    channels.forEach(channel => {
-                        const isCurrent = channel.number == currentChannel;
-                        const channelClass = 'channel-card' + (isCurrent ? ' current' : '');
-
-                        html += `
-                            <div class="${channelClass}" data-number="${channel.number}">
-                                <div class="channel-info">
-                                    <div class="channel-number">${channel.number || '---'}</div>
-                                    <div class="channel-name">${channel.name}</div>
-                                    <div class="channel-source">${channel.source || 'TV'}</div>
-                                </div>
-                                <button class="switch-btn"
-                                        onclick="switchChannel('${channel.number}', '${channel.name.replace(/'/g, "\\'")}')"
-                                        ${isCurrent ? 'disabled' : ''}>
-                                    ${isCurrent ? '📺 Current' : 'Switch'}
-                                </button>
-                            </div>
-                        `;
-                    });
-
-                    container.innerHTML = html;
-                }
-            </script>
-        </body>
-        </html>
-        """
-
-    def handle_list_channels(self, query):
-        """Handle /list endpoint - return channel list from TV"""
-        format_type = query.get('format', ['json'])[0]
-        refresh = query.get('refresh', ['false'])[0].lower() == 'true'
-
-        # Get channels directly from TV
-        channels = self.tv.get_channels(force_refresh=refresh)
-
-        if format_type == 'html':
-            # For HTML format, generate a simple table (though main interface uses AJAX)
-            html = self._generate_simple_channel_list(channels)
-            self._send_html(html)
-        else:
-            self._send_response(200, {
-                'total': len(channels),
-                'channels': channels,
-                'source': 'tv',
-                'cached': not refresh and self.tv.channels_last_updated is not None,
-                'last_updated': self.tv.channels_last_updated.isoformat() if self.tv.channels_last_updated else None
-            })
-
-    def _generate_simple_channel_list(self, channels):
-        """Generate a simple HTML channel list (fallback)"""
-        html = "<html><head><title>TV Channels</title></head><body>"
-        html += "<h1>TV Channels</h1><ul>"
-        for ch in channels:
-            html += f"<li>{ch.get('number')} - {ch.get('name')}</li>"
-        html += "</ul></body></html>"
-        return html
-
-    def handle_switch_channel(self, channel):
-        """Handle /switch/<channel> endpoint"""
-        if not channel:
-            self._send_error(400, "Channel identifier required")
-            return
-
-        success = self.tv.switch_to_channel(channel)
-
-        if success:
-            self._send_response(200, {
-                'message': f'Switched to channel {channel}',
-                'channel': channel
-            })
-        else:
-            self._send_error(404, f'Channel "{channel}" not found or switch failed')
-
-    def handle_status(self):
-        """Handle /status endpoint - TV connection and channel status"""
-        connected = self.tv.check_connection()
-        power = self.tv.get_power_status() if connected else "unknown"
-
-        # Get channel count
-        channels = self.tv.get_channels()
-
-        self._send_response(200, {
-            'connected': connected,
-            'power': power,
-            'tv_ip': self.tv.ip_address,
-            'channels': {
-                'total': len(channels),
-                'last_updated': self.tv.channels_last_updated.isoformat() if self.tv.channels_last_updated else None,
-                'cache_age_seconds': (datetime.now() - self.tv.channels_last_updated).total_seconds()
-                                    if self.tv.channels_last_updated else None
-            }
-        })
-
-    def handle_power(self):
-        """Handle /power endpoint - power status"""
-        power = self.tv.get_power_status()
-        self._send_response(200, {'power': power})
-
-    def handle_refresh_channels(self):
-        """Handle /refresh endpoint - force refresh channel list from TV"""
-        logger.info("Manual channel refresh requested")
-        channels = self.tv.get_channels(force_refresh=True)
-
-        self._send_response(200, {
-            'message': 'Channel list refreshed from TV',
-            'total': len(channels),
-            'channels': channels,  # Return all channels for AJAX
-            'total_found': len(channels)
-        })
-
-    def handle_channels_api(self, query):
-        """Handle /channels endpoint - AJAX API for channels"""
+    def handle_get_channels(self, query):
+        """Get channel list"""
         refresh = query.get('refresh', ['false'])[0].lower() == 'true'
         channels = self.tv.get_channels(force_refresh=refresh)
 
@@ -1254,13 +495,110 @@ class TVRequestHandler(BaseHTTPRequestHandler):
             'last_updated': self.tv.channels_last_updated.isoformat() if self.tv.channels_last_updated else None
         })
 
+    def handle_get_status(self):
+        """Get TV status"""
+        connected = self.tv.check_connection()
+        power = self.tv.get_power_status() if connected else "unknown"
+        channels = self.tv.get_channels()
+
+        self._send_response(200, {
+            'connected': connected,
+            'power': power,
+            'tv_ip': self.tv.ip_address,
+            'channels': {
+                'total': len(channels),
+                'last_updated': self.tv.channels_last_updated.isoformat() if self.tv.channels_last_updated else None
+            }
+        })
+
+    def handle_get_volume(self):
+        """Get volume and mute status"""
+        volume = self.tv.get_volume()
+        mute = self.tv.get_mute_status()
+
+        self._send_response(200, {
+            'volume': volume,
+            'muted': mute
+        })
+
+    def handle_switch_channel(self, channel):
+        """Switch to channel"""
+        if not channel:
+            self._send_error(400, "Channel identifier required")
+            return
+
+        success = self.tv.switch_to_channel(channel)
+        if success:
+            self._send_response(200, {'message': f'Switched to channel {channel}'})
+        else:
+            self._send_error(404, f'Channel "{channel}" not found')
+
+    def handle_power_on(self):
+        """Turn TV on"""
+        success = self.tv.power_on()
+        if success:
+            self._send_response(200, {'message': 'Power on command sent'})
+        else:
+            self._send_error(500, 'Failed to send power on command')
+
+    def handle_power_off(self):
+        """Turn TV off"""
+        success = self.tv.power_off()
+        if success:
+            self._send_response(200, {'message': 'Power off command sent'})
+        else:
+            self._send_error(500, 'Failed to send power off command')
+
+    def handle_volume_up(self):
+        """Increase volume"""
+        success = self.tv.volume_up()
+        if success:
+            volume = self.tv.get_volume()
+            self._send_response(200, {'message': 'Volume up', 'volume': volume})
+        else:
+            self._send_error(500, 'Failed to increase volume')
+
+    def handle_volume_down(self):
+        """Decrease volume"""
+        success = self.tv.volume_down()
+        if success:
+            volume = self.tv.get_volume()
+            self._send_response(200, {'message': 'Volume down', 'volume': volume})
+        else:
+            self._send_error(500, 'Failed to decrease volume')
+
+    def handle_volume_mute(self):
+        """Mute audio"""
+        success = self.tv.mute()
+        if success:
+            self._send_response(200, {'message': 'Muted'})
+        else:
+            self._send_error(500, 'Failed to mute')
+
+    def handle_volume_unmute(self):
+        """Unmute audio"""
+        success = self.tv.unmute()
+        if success:
+            self._send_response(200, {'message': 'Unmuted'})
+        else:
+            self._send_error(500, 'Failed to unmute')
+
+    def handle_refresh_channels(self):
+        """Refresh channel list"""
+        channels = self.tv.get_channels(force_refresh=True)
+        self._send_response(200, {
+            'message': 'Channel list refreshed',
+            'total': len(channels),
+            'channels': channels
+        })
+
     def log_message(self, format, *args):
         """Override to use our logger"""
         logger.info(f"{self.address_string()} - {format % args}")
 
+
 def main():
     """Main function to start the web service"""
-    # Load configuration
     try:
         with open('tv.toml', 'rb') as f:
             config = tomllib.load(f)
@@ -1282,7 +620,6 @@ host = "0.0.0.0"
         logger.error(f"Error loading config: {e}")
         return
 
-    # Get server configuration
     server_config = config.get('server', {})
     host = server_config.get('host', '0.0.0.0')
     port = server_config.get('port', 8080)
@@ -1291,7 +628,7 @@ host = "0.0.0.0"
     if debug:
         logging.getLogger().setLevel(logging.DEBUG)
 
-    # Test TV connection and fetch initial channels
+    # Test connection
     tv_config = config.get('tv', {})
     tv = SonyTVController(
         ip_address=tv_config.get('ip_address', ''),
@@ -1300,24 +637,19 @@ host = "0.0.0.0"
     )
 
     print("\n" + "="*70)
-    print("📺 SONY TV WEB SERVICE - Live Channel Data with AJAX")
+    print("📺 SONY TV WEB SERVICE")
     print("="*70)
 
     print(f"\n📡 Testing connection to TV at {tv.ip_address}...")
     if tv.check_connection():
         print("✅ Successfully connected to TV")
 
-        # Fetch initial channels
-        print("\n🔍 Scanning for channels directly from TV...")
+        power = tv.get_power_status()
+        print(f"⚡ TV Power Status: {power}")
+
+        print("\n🔍 Scanning for channels...")
         channels = tv.fetch_channels_from_tv()
         print(f"✅ Found {len(channels)} channels")
-
-        if channels:
-            print("\n📺 Sample channels:")
-            for ch in channels[:5]:
-                num = ch.get('number', 'N/A')
-                name = ch.get('name', 'Unknown')
-                print(f"   {num:4} | {name}")
     else:
         print("⚠️  Could not connect to TV - check configuration")
 
@@ -1325,13 +657,14 @@ host = "0.0.0.0"
     server_address = (host, port)
     httpd = HTTPServer(server_address, TVRequestHandler)
 
-    print(f"\n🌐 Web service running at:")
+    print(f"\n🌐 Web interface available at:")
     print(f"   http://{host if host != '0.0.0.0' else 'localhost'}:{port}/")
-    print(f"\n📋 AJAX-enabled interface with:")
+    print(f"\n📋 Features:")
+    print(f"   - Power ON/OFF")
+    print(f"   - Volume Up/Down/Mute")
     print(f"   - Live channel switching")
-    print(f"   - Selected channel moves to top")
-    print(f"   - Search/filter channels")
-    print(f"   - Real-time status updates")
+    print(f"   - Instant search filtering")
+    print(f"   - 5 channels per row layout")
     print(f"\n🛑 Press Ctrl+C to stop")
     print("="*70)
 
@@ -1340,6 +673,7 @@ host = "0.0.0.0"
     except KeyboardInterrupt:
         print("\n\n👋 Shutting down...")
         httpd.shutdown()
+
 
 if __name__ == "__main__":
     main()
