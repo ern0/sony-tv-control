@@ -3,7 +3,14 @@
 <head>
     <title>Sony TV Remote</title>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=yes">
+
+    <meta name="theme-color" content="#2196F3">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="SONY TV Control">
+    <meta name="mobile-web-app-capable" content="yes">
+
     <style>
         * {
             box-sizing: border-box;
@@ -15,7 +22,7 @@
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             min-height: 100vh;
-            padding: 20px;
+            padding: 10px;
         }
 
         .container {
@@ -35,7 +42,7 @@
         }
 
         .header h1 {
-            font-size: 2em;
+            font-size: clamp(1.5rem, 5vw, 2rem);
             margin-bottom: 5px;
         }
 
@@ -45,24 +52,32 @@
             border-bottom: 1px solid #e9ecef;
             display: flex;
             align-items: center;
-            gap: 20px;
+            gap: 15px;
             flex-wrap: wrap;
         }
 
         .status-item {
             display: flex;
             align-items: center;
-            gap: 8px;
-            font-size: 0.9em;
+            gap: 6px;
+            font-size: 0.85rem;
+        }
+
+        @media (min-width: 768px) {
+            .status-item {
+                font-size: 0.9rem;
+            }
         }
 
         .status-label {
             font-weight: 600;
             color: #495057;
+            white-space: nowrap;
         }
 
         .status-value {
             color: #212529;
+            word-break: break-word;
         }
 
         .status-dot {
@@ -70,6 +85,7 @@
             height: 10px;
             border-radius: 50%;
             display: inline-block;
+            flex-shrink: 0;
         }
 
         .dot-connected { background: #28a745; }
@@ -81,19 +97,27 @@
         .channel-count {
             background: #007bff;
             color: white;
-            padding: 2px 8px;
-            border-radius: 12px;
-            font-size: 0.8em;
+            padding: 2px 10px;
+            border-radius: 20px;
+            font-size: 0.8rem;
             margin-left: auto;
+            white-space: nowrap;
         }
 
         .control-panel {
-            padding: 15px 20px;
+            padding: 15px;
             background: white;
             border-bottom: 1px solid #e9ecef;
             display: flex;
-            gap: 15px;
+            gap: 10px;
             flex-wrap: wrap;
+        }
+
+        @media (min-width: 768px) {
+            .control-panel {
+                padding: 15px 20px;
+                gap: 15px;
+            }
         }
 
         .control-group {
@@ -103,21 +127,39 @@
             background: #f8f9fa;
             padding: 5px;
             border-radius: 8px;
+            flex-wrap: wrap;
+            flex: 1 1 auto;
+        }
+
+        @media (max-width: 480px) {
+            .control-group {
+                width: 100%;
+                justify-content: center;
+            }
         }
 
         .control-btn {
-            padding: 8px 16px;
+            padding: 10px 12px;
             border: none;
             border-radius: 6px;
-            font-size: 0.9em;
+            font-size: 0.9rem;
             font-weight: 500;
             cursor: pointer;
             display: flex;
             align-items: center;
             gap: 5px;
             transition: all 0.2s;
-            min-width: 60px;
+            min-width: 50px;
             justify-content: center;
+            flex: 1 1 auto;
+            touch-action: manipulation;
+        }
+
+        @media (min-width: 768px) {
+            .control-btn {
+                padding: 8px 16px;
+                min-width: 60px;
+            }
         }
 
         .control-btn.power-on {
@@ -145,6 +187,11 @@
             filter: brightness(110%);
         }
 
+        .control-btn:active {
+            transform: translateY(1px);
+            filter: brightness(90%);
+        }
+
         .control-btn:disabled {
             opacity: 0.5;
             cursor: not-allowed;
@@ -153,26 +200,40 @@
 
         .volume-display {
             background: #e9ecef;
-            padding: 8px 12px;
+            padding: 8px 10px;
             border-radius: 6px;
             font-weight: 600;
-            min-width: 80px;
+            min-width: 65px;
             text-align: center;
+            font-size: 0.9rem;
+        }
+
+        @media (min-width: 768px) {
+            .volume-display {
+                min-width: 80px;
+            }
         }
 
         .search-section {
-            padding: 15px 20px;
+            padding: 15px;
             background: white;
             border-bottom: 1px solid #e9ecef;
         }
 
+        @media (min-width: 768px) {
+            .search-section {
+                padding: 15px 20px;
+            }
+        }
+
         .search-box {
             width: 100%;
-            padding: 10px 15px;
-            font-size: 1em;
+            padding: 12px 15px;
+            font-size: 1rem;
             border: 2px solid #e9ecef;
-            border-radius: 8px;
+            border-radius: 10px;
             transition: border-color 0.2s;
+            -webkit-appearance: none;
         }
 
         .search-box:focus {
@@ -181,8 +242,14 @@
         }
 
         .channels-section {
-            padding: 0 20px 20px 20px;
+            padding: 0 15px 15px 15px;
             background: white;
+        }
+
+        @media (min-width: 768px) {
+            .channels-section {
+                padding: 0 20px 20px 20px;
+            }
         }
 
         .channels-header {
@@ -191,10 +258,12 @@
             align-items: center;
             margin-bottom: 15px;
             padding-top: 15px;
+            flex-wrap: wrap;
+            gap: 10px;
         }
 
         .channels-title {
-            font-size: 1.2em;
+            font-size: 1.2rem;
             color: #333;
         }
 
@@ -202,38 +271,71 @@
             background: #28a745;
             color: white;
             border: none;
-            padding: 6px 12px;
-            border-radius: 6px;
+            padding: 8px 16px;
+            border-radius: 8px;
             cursor: pointer;
-            font-size: 0.8em;
+            font-size: 0.9rem;
             display: flex;
             align-items: center;
             gap: 5px;
+            touch-action: manipulation;
         }
 
         .refresh-btn:hover {
             background: #218838;
         }
 
+        .refresh-btn:active {
+            transform: translateY(1px);
+        }
+
         .channels-grid {
             display: grid;
-            grid-template-columns: repeat(5, 1fr);
+            grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
             gap: 10px;
-            max-height: 500px;
+            max-height: 60vh;
             overflow-y: auto;
             padding: 5px;
+            -webkit-overflow-scrolling: touch;
+        }
+
+        @media (min-width: 640px) {
+            .channels-grid {
+                grid-template-columns: repeat(3, 1fr);
+            }
+        }
+
+        @media (min-width: 1024px) {
+            .channels-grid {
+                grid-template-columns: repeat(4, 1fr);
+            }
+        }
+
+        @media (min-width: 1280px) {
+            .channels-grid {
+                grid-template-columns: repeat(5, 1fr);
+            }
         }
 
         .channel-card {
             background: #f8f9fa;
-            border-radius: 6px;
-            padding: 10px;
+            border-radius: 8px;
+            padding: 12px;
             display: flex;
-            justify-content: space-between;
-            align-items: center;
+            flex-direction: column;
+            gap: 8px;
             transition: all 0.2s;
             border: 1px solid transparent;
-            font-size: 0.9em;
+            font-size: 0.9rem;
+        }
+
+        @media (min-width: 768px) {
+            .channel-card {
+                flex-direction: row;
+                justify-content: space-between;
+                align-items: center;
+                padding: 10px;
+            }
         }
 
         .channel-card:hover {
@@ -253,36 +355,50 @@
 
         .channel-info {
             flex: 1;
+            min-width: 0;
         }
 
         .channel-number {
-            font-size: 1em;
+            font-size: 1rem;
             font-weight: bold;
             color: #667eea;
         }
 
         .channel-name {
-            font-size: 0.9em;
+            font-size: 0.9rem;
             color: #333;
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
-            max-width: 150px;
         }
 
         .switch-btn {
             background: #007bff;
             color: white;
             border: none;
-            padding: 4px 8px;
-            border-radius: 4px;
+            padding: 8px 12px;
+            border-radius: 6px;
             cursor: pointer;
-            font-size: 0.8em;
+            font-size: 0.9rem;
             transition: background 0.2s;
+            width: 100%;
+            touch-action: manipulation;
+        }
+
+        @media (min-width: 768px) {
+            .switch-btn {
+                width: auto;
+                padding: 4px 8px;
+                font-size: 0.8rem;
+            }
         }
 
         .switch-btn:hover {
             background: #0056b3;
+        }
+
+        .switch-btn:active {
+            transform: translateY(1px);
         }
 
         .switch-btn:disabled {
@@ -294,15 +410,15 @@
             text-align: center;
             padding: 40px;
             color: #6c757d;
-            grid-column: span 5;
+            grid-column: 1 / -1;
         }
 
         .loading-spinner {
             border: 3px solid #f3f3f3;
             border-top: 3px solid #667eea;
             border-radius: 50%;
-            width: 30px;
-            height: 30px;
+            width: 40px;
+            height: 40px;
             animation: spin 1s linear infinite;
             margin: 0 auto 10px;
         }
@@ -314,23 +430,36 @@
 
         .notification {
             position: fixed;
-            top: 20px;
-            right: 20px;
-            padding: 10px 15px;
-            border-radius: 6px;
+            top: 15px;
+            right: 15px;
+            left: 15px;
+            max-width: 350px;
+            margin: 0 auto;
+            padding: 12px 18px;
+            border-radius: 10px;
             color: white;
-            animation: slideIn 0.3s ease-out;
+            animation: slideDown 0.3s ease-out;
             z-index: 1000;
-            font-size: 0.9em;
+            font-size: 0.95rem;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            text-align: center;
         }
 
-        @keyframes slideIn {
+        @media (min-width: 768px) {
+            .notification {
+                left: auto;
+                right: 20px;
+                min-width: 280px;
+            }
+        }
+
+        @keyframes slideDown {
             from {
-                transform: translateX(100%);
+                transform: translateY(-20px);
                 opacity: 0;
             }
             to {
-                transform: translateX(0);
+                transform: translateY(0);
                 opacity: 1;
             }
         }
@@ -343,7 +472,35 @@
             text-align: center;
             padding: 40px;
             color: #6c757d;
-            grid-column: span 5;
+            grid-column: 1 / -1;
+        }
+
+        .no-results {
+            grid-column: 1 / -1;
+            padding: 30px;
+        }
+
+        .error-message {
+            text-align: center;
+            padding: 40px;
+            color: #dc3545;
+            grid-column: 1 / -1;
+            font-size: 1rem;
+        }
+
+        /* Touch-friendly improvements */
+        @media (max-width: 768px) {
+            .control-btn, .switch-btn, .refresh-btn {
+                min-height: 44px;
+            }
+
+            .search-box {
+                font-size: 16px; /* Prevents zoom on iOS */
+            }
+
+            .channels-grid {
+                max-height: 50vh;
+            }
         }
     </style>
 </head>
@@ -424,7 +581,7 @@
                 clearTimeout(searchTimeout);
                 searchTimeout = setTimeout(() => {
                     filterChannels(e.target.value);
-                }, 50); // Instant filtering
+                }, 50);
             });
         });
 
@@ -635,19 +792,17 @@
                 }
             });
 
-            // Show count of visible channels
             const visibleCount = document.querySelectorAll('.channel-card:not(.hidden)').length;
-            if (visibleCount === 0) {
-                const container = document.getElementById('channelsContainer');
-                if (!document.querySelector('.no-results')) {
-                    const noResults = document.createElement('div');
-                    noResults.className = 'no-channels no-results';
-                    noResults.innerHTML = 'No matching channels found';
-                    container.appendChild(noResults);
-                }
-            } else {
-                const noResults = document.querySelector('.no-results');
-                if (noResults) noResults.remove();
+            const container = document.getElementById('channelsContainer');
+            const existingNoResults = document.querySelector('.no-results');
+
+            if (visibleCount === 0 && !existingNoResults) {
+                const noResults = document.createElement('div');
+                noResults.className = 'no-channels no-results';
+                noResults.innerHTML = 'No matching channels found';
+                container.appendChild(noResults);
+            } else if (visibleCount > 0 && existingNoResults) {
+                existingNoResults.remove();
             }
         }
 
@@ -696,6 +851,7 @@
             channels.forEach(channel => {
                 const isCurrent = channel.number == currentChannel;
                 const channelClass = 'channel-card' + (isCurrent ? ' current' : '');
+                const safeName = channel.name.replace(/'/g, "\\'");
 
                 html += `
                     <div class="${channelClass}" data-number="${channel.number}">
@@ -704,7 +860,7 @@
                             <div class="channel-name" title="${channel.name}">${channel.name}</div>
                         </div>
                         <button class="switch-btn"
-                                onclick="switchChannel('${channel.number}', '${channel.name.replace(/'/g, "\\'")}')"
+                                onclick="switchChannel('${channel.number}', '${safeName}')"
                                 ${isCurrent ? 'disabled' : ''}>
                             ${isCurrent ? '✓' : 'Switch'}
                         </button>
@@ -714,7 +870,6 @@
 
             container.innerHTML = html;
 
-            // Re-apply current search filter
             const searchBox = document.getElementById('searchBox');
             if (searchBox.value) {
                 filterChannels(searchBox.value);
