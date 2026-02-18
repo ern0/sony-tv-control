@@ -3,4 +3,10 @@ clear
 
 BASE=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 
-scp *tv* negro:/media/storage/data/sony-tv-control
+scp \
+    manifest.json \
+    sony_web_tv.py \
+    tv_remote.html \
+    icon_192x192.png \
+    \
+    negro:/media/storage/data/sony-tv-control

@@ -445,6 +445,77 @@ class TVRequestHandler(BaseHTTPRequestHandler):
         html = self.html_content.replace('{{TV_IP}}', self.tv.ip_address)
         self.wfile.write(html.encode('utf-8'))
 
+
+    def _send_file(self, path):
+        """Send a file with appropriate MIME type based on extension"""
+        try:
+            # Remove leading slash and handle empty path
+            if path.startswith('/'):
+                path = path[1:]
+
+            # If path is empty, serve index.html
+            if not path:
+                path = 'index.html'
+
+            # Get the file extension
+            _, ext = os.path.splitext(path)
+            ext = ext.lower()
+
+            # Define MIME types mapping
+            mime_types = {
+                '.html': 'text/html',
+                '.htm': 'text/html',
+                '.css': 'text/css',
+                '.js': 'application/javascript',
+                '.json': 'application/json',
+                '.png': 'image/png',
+                '.jpg': 'image/jpeg',
+                '.jpeg': 'image/jpeg',
+                '.gif': 'image/gif',
+                '.svg': 'image/svg+xml',
+                '.ico': 'image/x-icon',
+                '.txt': 'text/plain',
+            }
+
+            # Get MIME type or default to binary
+            content_type = mime_types.get(ext, 'application/octet-stream')
+
+            # Determine file path - look in current directory and static subdirectory
+            file_paths = [
+                os.path.join(os.path.dirname(__file__), path),
+                os.path.join(os.path.dirname(__file__), 'static', path)
+            ]
+
+            file_found = False
+            for file_path in file_paths:
+                if os.path.exists(file_path) and os.path.isfile(file_path):
+                    file_found = True
+                    break
+
+            if not file_found:
+                self._send_error(404, f'File not found: {path}')
+                return
+
+            # Read and send the file
+            with open(file_path, 'rb') as f:
+                content = f.read()
+
+            self.send_response(200)
+            self.send_header('Content-Type', content_type)
+            self.send_header('Content-Length', str(len(content)))
+            self.send_header('Cache-Control', 'no-cache, no-store, must-revalidate')
+            self.send_header('Pragma', 'no-cache')
+            self.send_header('Expires', '0')
+            self.end_headers()
+
+            self.wfile.write(content)
+
+        except PermissionError:
+            self._send_error(403, f'Permission denied: {path}')
+        except Exception as e:
+            logger.error(f"Error serving file {path}: {e}")
+            self._send_error(500, f'Internal server error')
+
     def do_GET(self):
         """Handle GET requests"""
         if not self.load_config_and_html():
@@ -482,7 +553,7 @@ class TVRequestHandler(BaseHTTPRequestHandler):
         elif path == '/api/refresh':
             self.handle_refresh_channels()
         else:
-            self._send_error(404, f"Endpoint not found: {path}")
+            self._send_file(path)
 
     def handle_get_channels(self, query):
         """Get channel list"""
