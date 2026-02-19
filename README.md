@@ -13,7 +13,7 @@ so I've downloaded Android apps,
 which can control our Sony smart TV.
 Tried some, but I was disappointed,
 asked DeepSeek if Sony TVs have some API.
-It showed me the POC, which looked great,
+It created me the POC, which looked great,
 so I decided to vibe-code my version,
 a webapp with Python backend.
 
