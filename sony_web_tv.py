@@ -26,15 +26,80 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+
+def apply_hd_filter(channels: List[Dict], hd_filter: str) -> List[Dict]:
+    """
+    Apply HD filtering to channel list based on hd_filter setting
+
+    Args:
+        channels: List of channel dictionaries
+        hd_filter: "none", "only", or "drop"
+
+    Returns:
+        Filtered channel list
+    """
+    if hd_filter == "none" or not hd_filter:
+        logger.info("HD filter disabled")
+        return channels
+
+    logger.info(f"Applying HD filter: {hd_filter}")
+
+    # Create a copy of channels to work with
+    channels_copy = channels.copy()
+    channels_to_remove = []
+
+    # First, build a mapping of base names to HD channels
+    hd_channels = {}
+    non_hd_channels = {}
+
+    for channel in channels_copy:
+        name = channel.get('name', '')
+        # Check if channel name ends with "HD" (case insensitive)
+        if name.upper().endswith('HD'):
+            base_name = name[:-2].strip()  # Remove "HD" and strip whitespace
+            hd_channels[base_name.upper()] = channel
+        else:
+            non_hd_channels[name.upper()] = channel
+
+    if hd_filter == "only":
+        # Keep only HD channels, remove corresponding non-HD channels
+        for base_name, hd_channel in hd_channels.items():
+            # Look for non-HD version of this channel
+            if base_name in non_hd_channels:
+                non_hd_channel = non_hd_channels[base_name]
+                channels_to_remove.append(non_hd_channel)
+
+        # Remove marked channels
+        filtered_channels = [c for c in channels_copy if c not in channels_to_remove]
+
+    elif hd_filter == "drop":
+        # Remove HD channels if non-HD version exists
+        for base_name, hd_channel in hd_channels.items():
+            if base_name in non_hd_channels:
+                channels_to_remove.append(hd_channel)
+
+        # Remove marked channels
+        filtered_channels = [c for c in channels_copy if c not in channels_to_remove]
+
+    else:
+        logger.warning(f"Unknown hd_filter value: {hd_filter}, ignoring")
+        return channels
+
+    logger.info(f"HD filter applied: {len(channels)} -> {len(filtered_channels)} channels")
+    return filtered_channels
+
+
 class SonyTVController:
     """Controller for Sony Bravia TV using REST API"""
 
     def __init__(self, ip_address: str, access_code: str, timeout: int = 5,
-                channel_offset: int = 0, channel_filters: List[str] = None):
+                channel_offset: int = 0, channel_filters: List[str] = None,
+                hd_filter: str = 'none'):
         self.ip_address = ip_address
         self.access_code = access_code
         self.timeout = timeout
-        self.channel_offset = channel_offset  # Add this line
+        self.channel_offset = channel_offset
+        self.hd_filter = hd_filter
         self.base_url = f"http://{ip_address}/sony"
         self.channels = []
         self.channels_last_updated = None
@@ -286,6 +351,9 @@ class SonyTVController:
                         #logger.info(f"Filtered out channel: {channel_name}")
 
                 all_channels.extend(filtered_channels)
+
+        # Apply HD filter here, on all_channels
+        all_channels = apply_hd_filter(all_channels, self.hd_filter)
 
         logger.info(f"Total channels after filtering: {len(all_channels)}")
         return all_channels
@@ -550,7 +618,7 @@ class TVRequestHandler(BaseHTTPRequestHandler):
             self.handle_get_status()
         elif path == '/api/volume':
             self.handle_get_volume()
-        elif path == '/api/get_channel_offset':  # Add this new endpoint
+        elif path == '/api/get_channel_offset':
             self.handle_get_channel_offset()
         elif path.startswith('/api/volume/set/'):
             # Extract volume value from path
@@ -727,7 +795,9 @@ def main():
 ip_address = "192.168.1.100"
 access_code = "your_psk_here"
 timeout = 5
+channel_offset = 0
 channel_filters = ["^megsz.*", ".*teszt$", "^mtv.*"]
+hd_filter = "none"  # Options: "none", "only", "drop"
 
 [server]
 port = 8080
@@ -757,18 +827,19 @@ debug = false
         print(f"\n❌ HTML template file 'tv_remote.html' not found!")
         return
 
-
-    # Initialize TV controller once at startup with channel filters and offset
+    # Initialize TV controller once at startup with channel filters, offset, and hd_filter
     tv_config = config.get('tv', {})
     channel_filters = tv_config.get('channel_filters', [])
-    channel_offset = tv_config.get('channel_offset', 0)  # Add this line, default to 0 if not specified
+    channel_offset = tv_config.get('channel_offset', 0)
+    hd_filter = tv_config.get('hd_filter', 'none')
 
     TVRequestHandler.tv = SonyTVController(
         ip_address=tv_config.get('ip_address', ''),
         access_code=tv_config.get('access_code', ''),
         timeout=tv_config.get('timeout', 5),
-        channel_offset=channel_offset,  # Add this parameter
-        channel_filters=channel_filters
+        channel_offset=channel_offset,
+        channel_filters=channel_filters,
+        hd_filter=hd_filter
     )
 
     print("\n" + "="*70)
@@ -790,6 +861,9 @@ debug = false
             for pattern in channel_filters:
                 print(f"   - Skip: '{pattern}'")
 
+        if hd_filter != 'none':
+            print(f"\n📺 HD filter active: {hd_filter}")
+
         print(f"\n✅ Found {len(channels)} channels after filtering")
     else:
         print("⚠️  Could not connect to TV - check configuration")
@@ -807,9 +881,11 @@ debug = false
     print(f"   - Instant search filtering")
     print(f"   - 5 channels per row layout")
     print(f"   - Direct volume set via /api/volume/set/{{value}}")
-    print(f"   - Channel offset: {channel_offset}")  # Add this line
+    print(f"   - Channel offset: {channel_offset}")
     if channel_filters:
         print(f"\n🎯 Channel filtering active - skipping {len(channel_filters)} patterns")
+    if hd_filter != 'none':
+        print(f"   - HD filter: {hd_filter}")
     print(f"\n🛑 Press Ctrl+C to stop")
     print("="*70)
 

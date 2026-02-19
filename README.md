@@ -419,3 +419,28 @@ simply provide it on API endpoint: /api/get_channel_offset
 
 Known glitch: now "001 - FIT TV" is the last on the list. Whatever.
 I'll fix it when making a better channel organizer.
+
+## V4 changes - HD filter
+
+Lot of channels have normal and HD pairs.
+If your TV is HD-capable,
+it's a good idea to hide the non-HD version.
+
+To help AI, I've marked the point
+where the filter should be inserted:
+```
+# TODO apply hd filter here, on all_channels
+
+logger.info(f"Total channels after filtering: {len(all_channels)}")
+return all_channels
+```
+
+The prompt is:
+```
+read "hd_filter" parameter from config
+at the point in program marked TODO
+if  "hd_filter" value is "none" or missing, do nothing
+if "hd_filter" is "only" or "drop", process channel list
+if "hd_filter" is "only", when a channel found name ends "HD", search and delete channel, which name without "HD"
+if "hd_filter" is "drop", when a channel found name ends "HD", search for channel name without "HD", if found, delete "HD" channel
+```

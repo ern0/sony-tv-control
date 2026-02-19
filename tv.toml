@@ -4,6 +4,7 @@ access_code = "qqqqqqqqqqqqqqqqqqqq"
 
 channel_filters = ["^megsz.*", ".*teszt$", "^mtv.*"]
 channel_offset = 1
+hd_filter="only"
 
 [server]
 port = 8080
