@@ -30,10 +30,11 @@ class SonyTVController:
     """Controller for Sony Bravia TV using REST API"""
 
     def __init__(self, ip_address: str, access_code: str, timeout: int = 5,
-                 channel_filters: List[str] = None):
+                channel_offset: int = 0, channel_filters: List[str] = None):
         self.ip_address = ip_address
         self.access_code = access_code
         self.timeout = timeout
+        self.channel_offset = channel_offset  # Add this line
         self.base_url = f"http://{ip_address}/sony"
         self.channels = []
         self.channels_last_updated = None
@@ -48,6 +49,10 @@ class SonyTVController:
                     logger.info(f"Added channel filter pattern: {pattern}")
                 except re.error as e:
                     logger.error(f"Invalid regex pattern '{pattern}': {e}")
+
+    def get_channel_offset(self) -> int:
+        """Get the channel offset value from configuration"""
+        return self.channel_offset
 
     def _make_request(self, service: str, method: str, params: List = None,
                      version: str = "1.0") -> Optional[Dict[str, Any]]:
@@ -277,7 +282,8 @@ class SonyTVController:
                     if not self._should_skip_channel(channel_name):
                         filtered_channels.append(channel)
                     else:
-                        logger.info(f"Filtered out channel: {channel_name}")
+                        pass
+                        #logger.info(f"Filtered out channel: {channel_name}")
 
                 all_channels.extend(filtered_channels)
 
@@ -544,6 +550,8 @@ class TVRequestHandler(BaseHTTPRequestHandler):
             self.handle_get_status()
         elif path == '/api/volume':
             self.handle_get_volume()
+        elif path == '/api/get_channel_offset':  # Add this new endpoint
+            self.handle_get_channel_offset()
         elif path.startswith('/api/volume/set/'):
             # Extract volume value from path
             try:
@@ -571,6 +579,13 @@ class TVRequestHandler(BaseHTTPRequestHandler):
             self.handle_refresh_channels()
         else:
             self._send_file(path)
+
+    def handle_get_channel_offset(self):
+        """Get channel offset value from configuration"""
+        offset = self.tv.get_channel_offset()
+        self._send_response(200, {
+            'channel_offset': offset
+        })
 
     def handle_get_channels(self, query):
         """Get channel list"""
@@ -742,14 +757,17 @@ debug = false
         print(f"\n❌ HTML template file 'tv_remote.html' not found!")
         return
 
-    # Initialize TV controller once at startup with channel filters
+
+    # Initialize TV controller once at startup with channel filters and offset
     tv_config = config.get('tv', {})
     channel_filters = tv_config.get('channel_filters', [])
+    channel_offset = tv_config.get('channel_offset', 0)  # Add this line, default to 0 if not specified
 
     TVRequestHandler.tv = SonyTVController(
         ip_address=tv_config.get('ip_address', ''),
         access_code=tv_config.get('access_code', ''),
         timeout=tv_config.get('timeout', 5),
+        channel_offset=channel_offset,  # Add this parameter
         channel_filters=channel_filters
     )
 
@@ -789,6 +807,7 @@ debug = false
     print(f"   - Instant search filtering")
     print(f"   - 5 channels per row layout")
     print(f"   - Direct volume set via /api/volume/set/{{value}}")
+    print(f"   - Channel offset: {channel_offset}")  # Add this line
     if channel_filters:
         print(f"\n🎯 Channel filtering active - skipping {len(channel_filters)} patterns")
     print(f"\n🛑 Press Ctrl+C to stop")

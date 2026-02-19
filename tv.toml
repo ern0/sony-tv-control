@@ -3,6 +3,7 @@ ip_address = "tv"
 access_code = "qqqqqqqqqqqqqqqqqqqq"
 
 channel_filters = ["^megsz.*", ".*teszt$", "^mtv.*"]
+channel_offset = 1
 
 [server]
 port = 8080

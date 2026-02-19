@@ -367,3 +367,55 @@ Also MTV is ended this year :(
 The config key somehow became "channel_filters" and
 it should be in the "[tv]" section,
 but I can live with it.
+
+### Feature: channel number offset
+
+Our TV displays channel numbers one higher than it's ID,
+e.g. channel 0 is displayed as "001" (hello, MIDI).
+To fix this, intruduced channel offset.
+
+Frontend:
+```
+fetch channel offset from service upon startup using /api/get_channel_offset
+display channel number in the same line with title
+if channel number is integer, add it to channel number and display it
+```
+
+Had to modify code by hand, original code:
+```
+return fetch('/api/get_channel_offset')
+    .then(response => response.json())
+    .then(data => {
+        if (data.status === 'success' && data.data && data.data.offset !== undefined) {
+            channelOffset = data.data.offset;
+```
+
+Modified:
+```
+        if (data.status === 'success' && data.data && data.data.channel_offset !== undefined) {
+            channelOffset = data.data.channel_offset;
+```
+
+Also removed displaying "original channel number":
+```
+//REMOVED: const showOffsetNote = (channelOffset !== 0 && !isNaN(parseInt(ch.number)) && Number.isInteger(parseInt(ch.number)));
+
+const showOffsetNote = false
+
+html += `
+    <div class="channel-card ${isCurrent ? 'current' : ''}" data-number="${ch.number}">
+        <div class="channel-number">
+            ${displayNumber}
+            ${showOffsetNote ? `<span class="channel-offset-note"> (orig: ${ch.number})</span>` : ''}
+        </div>
+
+```
+
+Backend:
+```
+read "channel_offset" value from configuration
+simply provide it on API endpoint: /api/get_channel_offset
+```
+
+Known glitch: now "001 - FIT TV" is the last on the list. Whatever.
+I'll fix it when making a better channel organizer.

@@ -297,6 +297,11 @@
             text-overflow: ellipsis;
             color: #212529;
         }
+        .channel-offset-note {
+            font-size: 0.7rem;
+            color: #6c757d;
+            font-style: italic;
+        }
         .switch-btn {
             background: #007bff;
             border: none;
@@ -435,13 +440,23 @@
         let currentVolume = 10; // default
         let isMuted = false;
         let searchTimeout = null;
+        let channelOffset = 0; // Default offset
 
         // DOM elements
         const volumeSlider = document.getElementById('volumeSlider');
         const volumePercent = document.getElementById('volumePercent');
 
         document.addEventListener('DOMContentLoaded', function() {
-            loadChannels();
+            // Fetch channel offset first, then load channels
+            fetchChannelOffset()
+                .then(() => {
+                    loadChannels();
+                })
+                .catch(error => {
+                    console.error('Error fetching offset, using default 0:', error);
+                    loadChannels();
+                });
+
             loadStatus();
             loadVolume();
 
@@ -464,6 +479,25 @@
                 }, 50);
             });
         });
+
+        function fetchChannelOffset() {
+            return fetch('/api/get_channel_offset')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.status === 'success' && data.data && data.data.channel_offset !== undefined) {
+                        channelOffset = data.data.channel_offset;
+                        console.log('Channel offset set to:', channelOffset);
+                        showNotification('Channel offset: ' + channelOffset, 'info');
+                    } else {
+                        // Keep default 0
+                        console.log('Using default channel offset: 0');
+                    }
+                })
+                .catch(error => {
+                    console.error('Failed to fetch channel offset:', error);
+                    // Keep default 0
+                });
+        }
 
         function showNotification(message, type) {
             const notification = document.getElementById('notification');
@@ -681,6 +715,15 @@
             }
         }
 
+        function getDisplayNumber(originalNumber) {
+            // Check if originalNumber is an integer (or can be parsed as one)
+            const num = parseInt(originalNumber);
+            if (!isNaN(num) && Number.isInteger(num)) {
+                return num + channelOffset;
+            }
+            return originalNumber; // Return as-is if not an integer
+        }
+
         function switchChannel(channelNumber, channelName) {
             const btn = event.target;
             btn.disabled = true;
@@ -714,9 +757,17 @@
             channels.forEach(ch => {
                 const isCurrent = (ch.number == currentChannel);
                 const safeName = ch.name.replace(/'/g, "\\'");
+                const displayNumber = getDisplayNumber(ch.number);
+                // Show offset note only if offset was actually applied
+                //REMOVED const showOffsetNote = (channelOffset !== 0 && !isNaN(parseInt(ch.number)) && Number.isInteger(parseInt(ch.number)));
+                const showOffsetNote = false
+
                 html += `
                     <div class="channel-card ${isCurrent ? 'current' : ''}" data-number="${ch.number}">
-                        <div class="channel-number">${ch.number || '---'}</div>
+                        <div class="channel-number">
+                            ${displayNumber}
+                            ${showOffsetNote ? `<span class="channel-offset-note"> (orig: ${ch.number})</span>` : ''}
+                        </div>
                         <div class="channel-name" title="${ch.name}">${ch.name}</div>
                         <button class="switch-btn" onclick="switchChannel('${ch.number}', '${safeName}')" ${isCurrent ? 'disabled' : ''}>
                             ${isCurrent ? '✓ ON' : 'Switch'}
