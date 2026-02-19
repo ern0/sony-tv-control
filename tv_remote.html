@@ -24,536 +24,398 @@
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             min-height: 100vh;
-            padding: 10px;
+            padding: 8px;
         }
 
         .container {
-            max-width: 1400px;
+            max-width: 1200px;
             margin: 0 auto;
             background: white;
-            border-radius: 20px;
-            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            border-radius: 24px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.25);
             overflow: hidden;
         }
 
+        /* header is now just a small bar — no large title */
         .header {
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
-            padding: 20px;
-            text-align: center;
-        }
-
-        .header h1 {
-            font-size: clamp(1.5rem, 5vw, 2rem);
-            margin-bottom: 5px;
-        }
-
-        .status-bar {
-            background: #f8f9fa;
-            padding: 10px 20px;
-            border-bottom: 1px solid #e9ecef;
+            padding: 8px 16px;
             display: flex;
             align-items: center;
-            gap: 15px;
+            justify-content: space-between;
+        }
+        .header h1 {
+            font-size: 1.2rem;
+            font-weight: 500;
+            letter-spacing: 0.3px;
+            margin: 0;
+        }
+        .header-icon {
+            font-size: 1.3rem;
+        }
+
+        /* combined status + controls row – single line, smaller buttons */
+        .top-bar {
+            background: #f8f9fa;
+            padding: 8px 12px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
             flex-wrap: wrap;
+            border-bottom: 1px solid #dee2e6;
+        }
+
+        /* status group inline */
+        .status-group {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            flex-wrap: wrap;
+            font-size: 0.8rem;
+            background: #ffffff;
+            padding: 4px 10px;
+            border-radius: 40px;
+            box-shadow: inset 0 1px 3px rgba(0,0,0,0.05);
         }
 
         .status-item {
             display: flex;
             align-items: center;
-            gap: 6px;
-            font-size: 0.85rem;
-        }
-
-        @media (min-width: 768px) {
-            .status-item {
-                font-size: 0.9rem;
-            }
-        }
-
-        .status-label {
-            font-weight: 600;
-            color: #495057;
+            gap: 4px;
             white-space: nowrap;
         }
-
-        .status-value {
-            color: #212529;
-            word-break: break-word;
-        }
-
         .status-dot {
-            width: 10px;
-            height: 10px;
+            width: 9px;
+            height: 9px;
             border-radius: 50%;
             display: inline-block;
             flex-shrink: 0;
         }
-
         .dot-connected { background: #28a745; }
         .dot-disconnected { background: #dc3545; }
         .dot-on { background: #28a745; }
         .dot-standby { background: #ffc107; }
         .dot-off { background: #6c757d; }
 
-        .channel-count {
-            background: #007bff;
-            color: white;
-            padding: 2px 10px;
-            border-radius: 20px;
-            font-size: 0.8rem;
-            margin-left: auto;
-            white-space: nowrap;
-        }
-
-        .control-panel {
-            padding: 15px;
-            background: white;
-            border-bottom: 1px solid #e9ecef;
-            display: flex;
-            gap: 10px;
-            flex-wrap: wrap;
-        }
-
-        @media (min-width: 768px) {
-            .control-panel {
-                padding: 15px 20px;
-                gap: 15px;
-            }
-        }
-
-        .control-group {
-            display: flex;
-            gap: 5px;
-            align-items: center;
-            background: #f8f9fa;
-            padding: 5px;
-            border-radius: 8px;
-            flex-wrap: wrap;
-            flex: 1 1 auto;
-        }
-
-        @media (max-width: 480px) {
-            .control-group {
-                width: 100%;
-                justify-content: center;
-            }
-        }
-
-        .control-btn {
-            padding: 10px 12px;
-            border: none;
-            border-radius: 6px;
-            font-size: 0.9rem;
-            font-weight: 500;
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            gap: 5px;
-            transition: all 0.2s;
-            min-width: 50px;
-            justify-content: center;
-            flex: 1 1 auto;
-            touch-action: manipulation;
-        }
-
-        @media (min-width: 768px) {
-            .control-btn {
-                padding: 8px 16px;
-                min-width: 60px;
-            }
-        }
-
-        .control-btn.power-on {
-            background: #28a745;
-            color: white;
-        }
-
-        .control-btn.power-off {
-            background: #dc3545;
-            color: white;
-        }
-
-        .control-btn.volume {
-            background: #007bff;
-            color: white;
-        }
-
-        .control-btn.mute {
-            background: #6c757d;
-            color: white;
-        }
-
-        .control-btn:hover {
-            transform: translateY(-1px);
-            filter: brightness(110%);
-        }
-
-        .control-btn:active {
-            transform: translateY(1px);
-            filter: brightness(90%);
-        }
-
-        .control-btn:disabled {
-            opacity: 0.5;
-            cursor: not-allowed;
-            transform: none;
-        }
-
-        .volume-display {
-            background: #e9ecef;
-            padding: 8px 10px;
-            border-radius: 6px;
+        .status-label {
             font-weight: 600;
-            min-width: 65px;
-            text-align: center;
-            font-size: 0.9rem;
+            color: #495057;
+            margin-right: 2px;
+        }
+        .status-value {
+            color: #212529;
+        }
+        .tv-ip {
+            font-family: monospace;
+            background: #e9ecef;
+            padding: 2px 6px;
+            border-radius: 12px;
         }
 
-        @media (min-width: 768px) {
-            .volume-display {
-                min-width: 80px;
-            }
+        /* smaller button group */
+        .action-group {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            margin-left: auto;
+            flex-wrap: wrap;
+        }
+
+        /* smaller buttons */
+        .small-btn {
+            background: white;
+            border: 1px solid #ced4da;
+            border-radius: 30px;
+            padding: 5px 12px;
+            font-size: 0.8rem;
+            font-weight: 500;
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            cursor: pointer;
+            transition: 0.15s;
+            touch-action: manipulation;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+        }
+        .small-btn.power-on {
+            background: #28a745;
+            border-color: #28a745;
+            color: white;
+        }
+        .small-btn.power-off {
+            background: #dc3545;
+            border-color: #dc3545;
+            color: white;
+        }
+        .small-btn.mute {
+            background: #6c757d;
+            border-color: #6c757d;
+            color: white;
+        }
+        .small-btn:active {
+            transform: translateY(1px);
+            filter: brightness(95%);
+        }
+        .small-btn:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+        }
+
+        /* volume slider container */
+        .slider-container {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background: white;
+            padding: 4px 10px;
+            border-radius: 30px;
+            border: 1px solid #dee2e6;
+            min-width: 160px;
+        }
+        .slider-icon {
+            font-size: 1.1rem;
+            color: #007bff;
+        }
+        input[type=range] {
+            width: 100px;
+            height: 4px;
+            -webkit-appearance: none;
+            background: #dee2e6;
+            border-radius: 10px;
+        }
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 16px;
+            height: 16px;
+            background: #007bff;
+            border-radius: 50%;
+            cursor: pointer;
+            box-shadow: 0 1px 4px rgba(0,0,0,0.2);
+        }
+        .volume-percent {
+            min-width: 38px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            color: #212529;
         }
 
         .search-section {
-            padding: 15px;
+            padding: 12px 16px;
             background: white;
             border-bottom: 1px solid #e9ecef;
         }
-
-        @media (min-width: 768px) {
-            .search-section {
-                padding: 15px 20px;
-            }
-        }
-
         .search-box {
             width: 100%;
-            padding: 12px 15px;
-            font-size: 1rem;
+            padding: 10px 14px;
+            font-size: 0.95rem;
             border: 2px solid #e9ecef;
-            border-radius: 10px;
-            transition: border-color 0.2s;
+            border-radius: 40px;
+            transition: 0.2s;
             -webkit-appearance: none;
+            background: #f8f9fa;
         }
-
         .search-box:focus {
             outline: none;
             border-color: #667eea;
-        }
-
-        .channels-section {
-            padding: 0 15px 15px 15px;
             background: white;
         }
 
-        @media (min-width: 768px) {
-            .channels-section {
-                padding: 0 20px 20px 20px;
-            }
+        .channels-section {
+            padding: 0 16px 16px 16px;
+            background: white;
         }
 
         .channels-header {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 15px;
-            padding-top: 15px;
-            flex-wrap: wrap;
-            gap: 10px;
+            margin: 12px 0 12px 0;
         }
-
         .channels-title {
-            font-size: 1.2rem;
+            font-size: 1.1rem;
+            font-weight: 600;
             color: #333;
         }
-
+        .channel-count-badge {
+            background: #e9ecef;
+            padding: 4px 12px;
+            border-radius: 30px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            color: #495057;
+        }
         .refresh-btn {
-            background: #28a745;
-            color: white;
-            border: none;
-            padding: 8px 16px;
-            border-radius: 8px;
-            cursor: pointer;
-            font-size: 0.9rem;
+            background: none;
+            border: 1px solid #ced4da;
+            border-radius: 30px;
+            padding: 5px 14px;
+            font-size: 0.8rem;
             display: flex;
             align-items: center;
-            gap: 5px;
-            touch-action: manipulation;
-        }
-
-        .refresh-btn:hover {
-            background: #218838;
-        }
-
-        .refresh-btn:active {
-            transform: translateY(1px);
+            gap: 4px;
+            cursor: pointer;
+            background: white;
         }
 
         .channels-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-            gap: 10px;
-            max-height: 60vh;
+            grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+            gap: 8px;
+            max-height: 55vh;
             overflow-y: auto;
-            padding: 5px;
+            padding: 4px 2px;
             -webkit-overflow-scrolling: touch;
-        }
-
-        @media (min-width: 640px) {
-            .channels-grid {
-                grid-template-columns: repeat(3, 1fr);
-            }
-        }
-
-        @media (min-width: 1024px) {
-            .channels-grid {
-                grid-template-columns: repeat(4, 1fr);
-            }
-        }
-
-        @media (min-width: 1280px) {
-            .channels-grid {
-                grid-template-columns: repeat(5, 1fr);
-            }
         }
 
         .channel-card {
             background: #f8f9fa;
-            border-radius: 8px;
-            padding: 12px;
+            border-radius: 14px;
+            padding: 10px;
             display: flex;
             flex-direction: column;
-            gap: 8px;
-            transition: all 0.2s;
+            gap: 6px;
             border: 1px solid transparent;
-            font-size: 0.9rem;
+            transition: 0.1s;
         }
-
-        @media (min-width: 768px) {
-            .channel-card {
-                flex-direction: row;
-                justify-content: space-between;
-                align-items: center;
-                padding: 10px;
-            }
-        }
-
-        .channel-card:hover {
-            transform: translateY(-1px);
-            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-            border-color: #667eea;
-        }
-
         .channel-card.current {
-            background: linear-gradient(135deg, #667eea20 0%, #764ba220 100%);
-            border-color: #667eea;
+            background: #e3f2fd;
+            border-color: #2196f3;
         }
-
         .channel-card.hidden {
             display: none;
         }
-
-        .channel-info {
-            flex: 1;
-            min-width: 0;
-        }
-
         .channel-number {
-            font-size: 1rem;
-            font-weight: bold;
-            color: #667eea;
-        }
-
-        .channel-name {
+            font-weight: 700;
             font-size: 0.9rem;
-            color: #333;
+            color: #495057;
+        }
+        .channel-name {
+            font-size: 0.85rem;
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
+            color: #212529;
         }
-
         .switch-btn {
             background: #007bff;
-            color: white;
             border: none;
-            padding: 8px 12px;
-            border-radius: 6px;
+            color: white;
+            padding: 6px 0;
+            border-radius: 20px;
+            font-size: 0.75rem;
+            font-weight: 500;
             cursor: pointer;
-            font-size: 0.9rem;
-            transition: background 0.2s;
-            width: 100%;
-            touch-action: manipulation;
+            margin-top: 4px;
         }
-
-        @media (min-width: 768px) {
-            .switch-btn {
-                width: auto;
-                padding: 4px 8px;
-                font-size: 0.8rem;
-            }
-        }
-
-        .switch-btn:hover {
-            background: #0056b3;
-        }
-
-        .switch-btn:active {
-            transform: translateY(1px);
-        }
-
         .switch-btn:disabled {
             background: #6c757d;
-            cursor: not-allowed;
+            opacity: 0.5;
         }
 
-        .loading {
-            text-align: center;
-            padding: 40px;
-            color: #6c757d;
+        .loading, .error-message, .no-channels {
             grid-column: 1 / -1;
+            text-align: center;
+            padding: 30px 10px;
+            color: #6c757d;
         }
-
         .loading-spinner {
             border: 3px solid #f3f3f3;
             border-top: 3px solid #667eea;
             border-radius: 50%;
-            width: 40px;
-            height: 40px;
+            width: 30px;
+            height: 30px;
             animation: spin 1s linear infinite;
-            margin: 0 auto 10px;
+            margin: 0 auto 8px;
         }
-
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
 
         .notification {
             position: fixed;
-            top: 15px;
-            right: 15px;
-            left: 15px;
-            max-width: 350px;
+            top: 12px;
+            right: 12px;
+            left: 12px;
+            max-width: 300px;
             margin: 0 auto;
-            padding: 12px 18px;
-            border-radius: 10px;
+            padding: 10px 16px;
+            border-radius: 40px;
             color: white;
-            animation: slideDown 0.3s ease-out;
-            z-index: 1000;
-            font-size: 0.95rem;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            animation: slideDown 0.2s;
+            z-index: 2000;
+            font-size: 0.9rem;
             text-align: center;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.2);
         }
-
-        @media (min-width: 768px) {
-            .notification {
-                left: auto;
-                right: 20px;
-                min-width: 280px;
-            }
-        }
-
-        @keyframes slideDown {
-            from {
-                transform: translateY(-20px);
-                opacity: 0;
-            }
-            to {
-                transform: translateY(0);
-                opacity: 1;
-            }
-        }
-
         .notification.success { background: #28a745; }
         .notification.error { background: #dc3545; }
         .notification.info { background: #17a2b8; }
 
-        .no-channels {
-            text-align: center;
-            padding: 40px;
-            color: #6c757d;
-            grid-column: 1 / -1;
-        }
-
-        .no-results {
-            grid-column: 1 / -1;
-            padding: 30px;
-        }
-
-        .error-message {
-            text-align: center;
-            padding: 40px;
-            color: #dc3545;
-            grid-column: 1 / -1;
-            font-size: 1rem;
-        }
-
-        /* Touch-friendly improvements */
-        @media (max-width: 768px) {
-            .control-btn, .switch-btn, .refresh-btn {
-                min-height: 44px;
+        @media (max-width: 600px) {
+            .top-bar {
+                flex-direction: column;
+                align-items: stretch;
             }
-
-            .search-box {
-                font-size: 16px; /* Prevents zoom on iOS */
+            .action-group {
+                margin-left: 0;
+                justify-content: space-between;
             }
-
-            .channels-grid {
-                max-height: 50vh;
+            .slider-container {
+                flex: 1;
+                min-width: auto;
             }
         }
     </style>
 </head>
 <body>
     <div class="container">
+        <!-- very compact header (no large title) -->
         <div class="header">
-            <h1>📺 Sony TV Remote</h1>
+            <h1>📺 Sony Remote</h1>
+            <span class="header-icon">⚙️</span>
         </div>
 
-        <div class="status-bar" id="statusBar">
-            <div class="status-item">
-                <span class="status-label">Connection:</span>
-                <span class="status-dot" id="connectionDot"></span>
-                <span class="status-value" id="connectionStatus">Checking...</span>
+        <!-- single line: status + buttons + slider -->
+        <div class="top-bar">
+            <div class="status-group">
+                <div class="status-item">
+                    <span class="status-dot" id="connectionDot"></span>
+                    <span class="status-value" id="connectionStatus">...</span>
+                </div>
+                <div class="status-item">
+                    <span class="status-dot" id="powerDot"></span>
+                    <span class="status-value" id="powerStatus">...</span>
+                </div>
+                <div class="status-item">
+                    <span class="status-label">IP:</span>
+                    <span class="status-value tv-ip" id="tvIp">{{TV_IP}}</span>
+                </div>
             </div>
-            <div class="status-item">
-                <span class="status-label">Power:</span>
-                <span class="status-dot" id="powerDot"></span>
-                <span class="status-value" id="powerStatus">Unknown</span>
+
+            <div class="action-group">
+                <!-- smaller on/off buttons -->
+                <button class="small-btn power-on" onclick="powerOn()" id="powerOnBtn">🔴 On</button>
+                <button class="small-btn power-off" onclick="powerOff()" id="powerOffBtn">⚫ Off</button>
+                <button class="small-btn mute" onclick="toggleMute()" id="muteBtn">🔇 Mute</button>
+
+                <!-- volume slider (GET on change) -->
+                <div class="slider-container">
+                    <span class="slider-icon">🔊</span>
+                    <input type="range" id="volumeSlider" min="0" max="100" value="0" step="1">
+                    <span class="volume-percent" id="volumePercent">0%</span>
+                </div>
             </div>
-            <div class="status-item">
-                <span class="status-label">TV IP:</span>
-                <span class="status-value" id="tvIp">{{TV_IP}}</span>
-            </div>
-            <div class="channel-count" id="channelCount">0 channels</div>
         </div>
 
-        <div class="control-panel">
-            <div class="control-group">
-                <button class="control-btn power-on" onclick="powerOn()" id="powerOnBtn">🔴 On</button>
-                <button class="control-btn power-off" onclick="powerOff()" id="powerOffBtn">⚫ Off</button>
-            </div>
-
-            <div class="control-group">
-                <button class="control-btn mute" onclick="toggleMute()" id="muteBtn">🔇 Mute</button>
-                <button class="control-btn volume" onclick="volumeDown()" id="volumeDownBtn">🔊 -</button>
-                <span class="volume-display" id="volumeDisplay">--</span>
-                <button class="control-btn volume" onclick="volumeUp()" id="volumeUpBtn">🔊 +</button>
-            </div>
-        </div>
-
+        <!-- search input (acts as search button) -->
         <div class="search-section">
-            <input type="text" class="search-box" id="searchBox" placeholder="🔍 Type to filter channels by name...">
+            <input type="text" class="search-box" id="searchBox" placeholder="🔍 Search channels by name...">
         </div>
 
         <div class="channels-section">
             <div class="channels-header">
-                <h2 class="channels-title">TV Channels</h2>
-                <button class="refresh-btn" id="refreshBtn" onclick="refreshChannels()">
-                    🔄 Refresh
-                </button>
+                <span class="channels-title">TV Channels</span>
+                <span class="channel-count-badge" id="channelCount">0</span>
+                <button class="refresh-btn" id="refreshBtn" onclick="refreshChannels()">🔄 Refresh</button>
             </div>
 
             <div id="channelsContainer" class="channels-grid">
@@ -570,14 +432,30 @@
     <script>
         let currentChannel = null;
         let allChannels = [];
-        let currentVolume = null;
+        let currentVolume = 10; // default
         let isMuted = false;
         let searchTimeout = null;
+
+        // DOM elements
+        const volumeSlider = document.getElementById('volumeSlider');
+        const volumePercent = document.getElementById('volumePercent');
 
         document.addEventListener('DOMContentLoaded', function() {
             loadChannels();
             loadStatus();
             loadVolume();
+
+            // Slider: update local display immediately, send GET on change (mouse up)
+            volumeSlider.addEventListener('input', function(e) {
+                const val = parseInt(e.target.value);
+                volumePercent.textContent = val + '%';
+                // we do NOT send command on input, only on change
+            });
+
+            volumeSlider.addEventListener('change', function(e) {
+                const val = parseInt(e.target.value);
+                setVolume(val); // uses GET
+            });
 
             document.getElementById('searchBox').addEventListener('input', function(e) {
                 clearTimeout(searchTimeout);
@@ -592,7 +470,6 @@
             notification.style.display = 'block';
             notification.className = 'notification ' + type;
             notification.textContent = message;
-
             setTimeout(() => {
                 notification.style.display = 'none';
             }, 2000);
@@ -612,7 +489,6 @@
 
                     const powerDot = document.getElementById('powerDot');
                     const powerStatus = document.getElementById('powerStatus');
-
                     let powerDotClass = 'status-dot ';
                     if (power === 'active') {
                         powerDotClass += 'dot-on';
@@ -626,15 +502,12 @@
                     }
                     powerDot.className = powerDotClass;
 
-                    document.getElementById('powerOnBtn').disabled = !connected;
-                    document.getElementById('powerOffBtn').disabled = !connected;
-                    document.getElementById('volumeUpBtn').disabled = !connected;
-                    document.getElementById('volumeDownBtn').disabled = !connected;
-                    document.getElementById('muteBtn').disabled = !connected;
+                    // enable/disable based on connection
+                    const btns = [ 'powerOnBtn', 'powerOffBtn', 'muteBtn' ];
+                    btns.forEach(id => document.getElementById(id).disabled = !connected);
+                    volumeSlider.disabled = !connected;
                 })
-                .catch(error => {
-                    console.error('Status error:', error);
-                });
+                .catch(error => console.error('Status error:', error));
         }
 
         function loadVolume() {
@@ -644,137 +517,139 @@
                     if (data.data.volume !== null) {
                         currentVolume = data.data.volume;
                         isMuted = data.data.muted || false;
-                        updateVolumeDisplay();
+                        updateVolumeUI();
                     }
                 })
-                .catch(error => {
-                    console.error('Volume error:', error);
-                });
+                .catch(error => console.error('Volume error:', error));
         }
 
-        function updateVolumeDisplay() {
-            const display = document.getElementById('volumeDisplay');
+        function updateVolumeUI() {
             if (isMuted) {
-                display.textContent = 'Muted';
-                display.style.background = '#dc3545';
-                display.style.color = 'white';
+                volumePercent.textContent = 'Muted';
+                volumeSlider.value = 0;
             } else {
-                display.textContent = currentVolume !== null ? currentVolume + '%' : '--';
-                display.style.background = '#e9ecef';
-                display.style.color = '#212529';
+                volumePercent.textContent = currentVolume + '%';
+                volumeSlider.value = currentVolume;
             }
         }
 
-        function powerOn() {
-            sendCommand('/api/power/on', 'Powering on...');
+        // Set volume using GET request (as requested)
+        function setVolume(level) {
+            // If muted, changing volume should unmute (optimistic UI)
+            if (isMuted) {
+                isMuted = false;
+            }
+
+            // Optimistically update UI
+            currentVolume = level;
+            updateVolumeUI();
+
+            // Send GET request to /api/volume/set/{level}
+            fetch('/api/volume/set/' + level, { method: 'GET' })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.status === 'success') {
+                        showNotification('Volume ' + level, 'success');
+                        // Refresh volume status to confirm
+                        loadVolume();
+                    } else {
+                        // If failed, revert by reloading volume
+                        showNotification('Volume command failed', 'error');
+                        loadVolume();
+                    }
+                })
+                .catch(error => {
+                    console.error('Set volume error:', error);
+                    showNotification('Error setting volume', 'error');
+                    // Revert to actual volume
+                    loadVolume();
+                });
         }
 
-        function powerOff() {
-            sendCommand('/api/power/off', 'Powering off...');
-        }
-
-        function volumeUp() {
-            sendCommand('/api/volume/up', 'Volume up...', () => {
-                if (currentVolume !== null) {
-                    currentVolume = Math.min(100, currentVolume + 1);
-                    isMuted = false;
-                    updateVolumeDisplay();
-                }
-            });
-        }
-
-        function volumeDown() {
-            sendCommand('/api/volume/down', 'Volume down...', () => {
-                if (currentVolume !== null) {
-                    currentVolume = Math.max(0, currentVolume - 1);
-                    isMuted = false;
-                    updateVolumeDisplay();
-                }
-            });
-        }
+        function powerOn() { sendCommand('/api/power/on', 'Powering on...', loadStatus); }
+        function powerOff() { sendCommand('/api/power/off', 'Powering off...', loadStatus); }
 
         function toggleMute() {
             const endpoint = isMuted ? '/api/volume/unmute' : '/api/volume/mute';
             sendCommand(endpoint, isMuted ? 'Unmuting...' : 'Muting...', () => {
                 isMuted = !isMuted;
-                updateVolumeDisplay();
+                updateVolumeUI();
+                loadVolume();
             });
         }
 
         function sendCommand(endpoint, message, callback) {
             const btn = event?.target;
             if (btn) {
-                const originalText = btn.textContent;
+                const original = btn.textContent;
                 btn.disabled = true;
                 btn.textContent = '⏳';
-
                 fetch(endpoint)
-                    .then(response => response.json())
+                    .then(res => res.json())
                     .then(data => {
                         if (data.status === 'success') {
-                            showNotification('Command sent', 'success');
+                            showNotification('OK', 'success');
                             if (callback) callback();
-                            loadVolume();
-                            loadStatus();
                         } else {
                             showNotification('Failed', 'error');
                         }
                     })
-                    .catch(error => {
-                        console.error('Error:', error);
-                        showNotification('Command failed', 'error');
-                    })
+                    .catch(() => showNotification('Command failed', 'error'))
                     .finally(() => {
                         btn.disabled = false;
-                        btn.textContent = originalText;
+                        btn.textContent = original;
                     });
+            } else {
+                // direct call without event
+                fetch(endpoint)
+                    .then(res => res.json())
+                    .then(data => {
+                        if (data.status === 'success') {
+                            showNotification('OK', 'success');
+                            if (callback) callback();
+                        } else {
+                            showNotification('Failed', 'error');
+                        }
+                    })
+                    .catch(() => showNotification('Command failed', 'error'));
             }
         }
 
         function loadChannels() {
             fetch('/api/channels')
-                .then(response => response.json())
+                .then(res => res.json())
                 .then(data => {
                     if (data.status == 'success') {
-                        allChannels = data.data.channels;
+                        allChannels = data.data.channels || [];
                         renderChannels(allChannels);
-                        document.getElementById('channelCount').textContent =
-                            allChannels.length + ' channels';
+                        document.getElementById('channelCount').textContent = allChannels.length + ' ch';
+                    } else {
+                        throw new Error('no channels');
                     }
                 })
-                .catch(error => {
-                    console.error('Error:', error);
-                    document.getElementById('channelsContainer').innerHTML =
-                        '<div class="error-message">Failed to load channels</div>';
+                .catch(err => {
+                    document.getElementById('channelsContainer').innerHTML = '<div class="error-message">⚠️ Failed to load channels</div>';
                 });
         }
 
         function refreshChannels() {
             const btn = document.getElementById('refreshBtn');
             btn.disabled = true;
-            btn.innerHTML = '🔄 Refreshing...';
-
+            btn.innerHTML = '🔄 ...';
             document.getElementById('channelsContainer').innerHTML = `
-                <div class="loading">
-                    <div class="loading-spinner"></div>
-                    Refreshing channels...
-                </div>
+                <div class="loading"><div class="loading-spinner"></div>Refreshing...</div>
             `;
-
             fetch('/api/refresh')
-                .then(response => response.json())
+                .then(res => res.json())
                 .then(data => {
                     if (data.status == 'success') {
-                        allChannels = data.data.channels;
+                        allChannels = data.data.channels || [];
                         renderChannels(allChannels);
-                        showNotification('Channels refreshed!', 'success');
+                        showNotification('Channels updated', 'success');
                         loadStatus();
                     }
                 })
-                .catch(error => {
-                    console.error('Error:', error);
-                    showNotification('Refresh failed', 'error');
-                })
+                .catch(() => showNotification('Refresh failed', 'error'))
                 .finally(() => {
                     btn.disabled = false;
                     btn.innerHTML = '🔄 Refresh';
@@ -783,99 +658,77 @@
 
         function filterChannels(query) {
             const cards = document.querySelectorAll('.channel-card');
-            const searchTerm = query.toLowerCase().trim();
-
+            const term = query.toLowerCase().trim();
             cards.forEach(card => {
-                const channelName = card.querySelector('.channel-name').textContent.toLowerCase();
-                if (searchTerm === '' || channelName.includes(searchTerm)) {
+                const name = card.querySelector('.channel-name')?.textContent.toLowerCase() || '';
+                if (term === '' || name.includes(term)) {
                     card.classList.remove('hidden');
                 } else {
                     card.classList.add('hidden');
                 }
             });
-
-            const visibleCount = document.querySelectorAll('.channel-card:not(.hidden)').length;
+            // remove any old "no results" placeholder
             const container = document.getElementById('channelsContainer');
-            const existingNoResults = document.querySelector('.no-results');
+            const existingNone = container.querySelector('.no-results');
+            if (existingNone) existingNone.remove();
 
-            if (visibleCount === 0 && !existingNoResults) {
-                const noResults = document.createElement('div');
-                noResults.className = 'no-channels no-results';
-                noResults.innerHTML = 'No matching channels found';
-                container.appendChild(noResults);
-            } else if (visibleCount > 0 && existingNoResults) {
-                existingNoResults.remove();
+            const visible = document.querySelectorAll('.channel-card:not(.hidden)').length;
+            if (visible === 0) {
+                const msg = document.createElement('div');
+                msg.className = 'no-channels no-results';
+                msg.innerHTML = '🔍 No matching channels';
+                container.appendChild(msg);
             }
         }
 
         function switchChannel(channelNumber, channelName) {
             const btn = event.target;
             btn.disabled = true;
-            const originalText = btn.textContent;
+            const original = btn.textContent;
             btn.textContent = '⏳';
-
             fetch('/api/switch/' + encodeURIComponent(channelNumber))
-                .then(response => response.json())
+                .then(res => res.json())
                 .then(data => {
                     if (data.status == 'success') {
-                        showNotification('Switched to ' + channelName, 'success');
+                        showNotification('Now on ' + channelName, 'success');
                         currentChannel = channelNumber;
                         renderChannels(allChannels);
                     } else {
-                        showNotification('Failed to switch', 'error');
+                        showNotification('Switch failed', 'error');
                     }
                 })
-                .catch(error => {
-                    console.error('Error:', error);
-                    showNotification('Switch failed', 'error');
-                })
+                .catch(() => showNotification('Error', 'error'))
                 .finally(() => {
                     btn.disabled = false;
-                    btn.textContent = originalText;
+                    btn.textContent = original;
                 });
         }
 
         function renderChannels(channels) {
             const container = document.getElementById('channelsContainer');
-
-            if (!channels || channels.length == 0) {
-                container.innerHTML = `
-                    <div class="no-channels">
-                        <i>📺</i>
-                        <h3>No channels found</h3>
-                        <p>Try refreshing</p>
-                    </div>
-                `;
+            if (!channels || channels.length === 0) {
+                container.innerHTML = '<div class="no-channels">📺 No channels found</div>';
                 return;
             }
-
             let html = '';
-            channels.forEach(channel => {
-                const isCurrent = channel.number == currentChannel;
-                const channelClass = 'channel-card' + (isCurrent ? ' current' : '');
-                const safeName = channel.name.replace(/'/g, "\\'");
-
+            channels.forEach(ch => {
+                const isCurrent = (ch.number == currentChannel);
+                const safeName = ch.name.replace(/'/g, "\\'");
                 html += `
-                    <div class="${channelClass}" data-number="${channel.number}">
-                        <div class="channel-info">
-                            <div class="channel-number">${channel.number || '---'}</div>
-                            <div class="channel-name" title="${channel.name}">${channel.name}</div>
-                        </div>
-                        <button class="switch-btn"
-                                onclick="switchChannel('${channel.number}', '${safeName}')"
-                                ${isCurrent ? 'disabled' : ''}>
-                            ${isCurrent ? '✓' : 'Switch'}
+                    <div class="channel-card ${isCurrent ? 'current' : ''}" data-number="${ch.number}">
+                        <div class="channel-number">${ch.number || '---'}</div>
+                        <div class="channel-name" title="${ch.name}">${ch.name}</div>
+                        <button class="switch-btn" onclick="switchChannel('${ch.number}', '${safeName}')" ${isCurrent ? 'disabled' : ''}>
+                            ${isCurrent ? '✓ ON' : 'Switch'}
                         </button>
                     </div>
                 `;
             });
-
             container.innerHTML = html;
-
-            const searchBox = document.getElementById('searchBox');
-            if (searchBox.value) {
-                filterChannels(searchBox.value);
-            }
+            // reapply filter if search active
+            const searchVal = document.getElementById('searchBox').value;
+            if (searchVal) filterChannels(searchVal);
+            document.getElementById('channelCount').textContent = channels.length + ' ch';
         }
     </script>
 </body>

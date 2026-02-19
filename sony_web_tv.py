@@ -9,14 +9,14 @@ Includes AJAX interface with channel switching and volume control
 import json
 import tomllib
 import logging
-from typing import Dict, List, Optional, Any
+import re
+from typing import Dict, List, Optional, Any, Pattern
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from urllib.parse import urlparse, parse_qs
 from urllib.request import Request, urlopen
 from urllib.error import URLError, HTTPError
 import socket
 from datetime import datetime
-import re
 import os
 
 # Configure logging
@@ -29,7 +29,8 @@ logger = logging.getLogger(__name__)
 class SonyTVController:
     """Controller for Sony Bravia TV using REST API"""
 
-    def __init__(self, ip_address: str, access_code: str, timeout: int = 5):
+    def __init__(self, ip_address: str, access_code: str, timeout: int = 5,
+                 channel_filters: List[str] = None):
         self.ip_address = ip_address
         self.access_code = access_code
         self.timeout = timeout
@@ -37,6 +38,16 @@ class SonyTVController:
         self.channels = []
         self.channels_last_updated = None
         self.channels_cache_duration = 300  # 5 minutes cache
+        # Compile channel filter patterns
+        self.channel_filter_patterns = []
+        if channel_filters:
+            for pattern in channel_filters:
+                print(f"{pattern}")
+                try:
+                    self.channel_filter_patterns.append(re.compile(pattern, re.IGNORECASE))
+                    logger.info(f"Added channel filter pattern: {pattern}")
+                except re.error as e:
+                    logger.error(f"Invalid regex pattern '{pattern}': {e}")
 
     def _make_request(self, service: str, method: str, params: List = None,
                      version: str = "1.0") -> Optional[Dict[str, Any]]:
@@ -181,6 +192,18 @@ class SonyTVController:
                             return vol_info.get("mute", False)
         return None
 
+    def _should_skip_channel(self, channel_name: str) -> bool:
+        """Check if channel should be skipped based on filter patterns"""
+        if not self.channel_filter_patterns:
+            return False
+
+        for pattern in self.channel_filter_patterns:
+            if pattern.match(channel_name):
+                logger.debug(f"Skipping channel '{channel_name}' - matches pattern '{pattern.pattern}'")
+                return True
+
+        return False
+
     def fetch_channels_from_tv(self) -> List[Dict]:
         """Fetch channels directly from TV using the API"""
         logger.info("Fetching channels directly from TV...")
@@ -246,9 +269,19 @@ class SonyTVController:
                     continue
 
                 channels = self._fetch_channels_from_source(source_uri, source_title)
-                all_channels.extend(channels)
 
-        logger.info(f"Total channels found: {len(all_channels)}")
+                # Apply channel filtering
+                filtered_channels = []
+                for channel in channels:
+                    channel_name = channel.get('name', '')
+                    if not self._should_skip_channel(channel_name):
+                        filtered_channels.append(channel)
+                    else:
+                        logger.info(f"Filtered out channel: {channel_name}")
+
+                all_channels.extend(filtered_channels)
+
+        logger.info(f"Total channels after filtering: {len(all_channels)}")
         return all_channels
 
     def _fetch_channels_from_source(self, source_uri: str, source_title: str) -> List[Dict]:
@@ -384,37 +417,13 @@ class SonyTVController:
 class TVRequestHandler(BaseHTTPRequestHandler):
     """HTTP request handler for TV web service"""
 
+    # Class variables shared across all instances
+    tv = None
+    html_content = None
+
     def __init__(self, *args, **kwargs):
-        self.tv = None
-        self.html_content = None
+        # Initialize without loading config
         super().__init__(*args, **kwargs)
-
-    def load_config_and_html(self):
-        """Load configuration and HTML template"""
-        try:
-            # Load config
-            with open('tv.toml', 'rb') as f:
-                config = tomllib.load(f)
-
-            tv_config = config.get('tv', {})
-            self.tv = SonyTVController(
-                ip_address=tv_config.get('ip_address', '192.168.1.100'),
-                access_code=tv_config.get('access_code', ''),
-                timeout=tv_config.get('timeout', 5)
-            )
-
-            # Load HTML template
-            html_path = os.path.join(os.path.dirname(__file__), 'tv_remote.html')
-            with open(html_path, 'r', encoding='utf-8') as f:
-                self.html_content = f.read()
-
-            return True
-        except FileNotFoundError as e:
-            logger.error(f"File not found: {e}")
-            return False
-        except Exception as e:
-            logger.error(f"Error loading config: {e}")
-            return False
 
     def _send_response(self, status_code: int, data: Any):
         """Send JSON response"""
@@ -444,7 +453,6 @@ class TVRequestHandler(BaseHTTPRequestHandler):
         # Replace placeholder with actual TV IP
         html = self.html_content.replace('{{TV_IP}}', self.tv.ip_address)
         self.wfile.write(html.encode('utf-8'))
-
 
     def _send_file(self, path):
         """Send a file with appropriate MIME type based on extension"""
@@ -518,8 +526,9 @@ class TVRequestHandler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         """Handle GET requests"""
-        if not self.load_config_and_html():
-            self._send_error(500, "Configuration or HTML template not loaded")
+        # Check if TV controller is initialized
+        if self.tv is None or self.html_content is None:
+            self._send_error(500, "TV controller not initialized")
             return
 
         parsed_url = urlparse(self.path)
@@ -535,6 +544,14 @@ class TVRequestHandler(BaseHTTPRequestHandler):
             self.handle_get_status()
         elif path == '/api/volume':
             self.handle_get_volume()
+        elif path.startswith('/api/volume/set/'):
+            # Extract volume value from path
+            try:
+                value_str = path.replace('/api/volume/set/', '')
+                value = int(value_str)
+                self.handle_volume_set(value)
+            except ValueError:
+                self._send_error(400, 'Invalid volume value')
         elif path.startswith('/api/switch/'):
             channel = path.replace('/api/switch/', '')
             self.handle_switch_channel(channel)
@@ -638,6 +655,19 @@ class TVRequestHandler(BaseHTTPRequestHandler):
         else:
             self._send_error(500, 'Failed to decrease volume')
 
+    def handle_volume_set(self, value: int):
+        """Set volume to specific level"""
+        if value < 0 or value > 100:
+            self._send_error(400, 'Volume must be between 0 and 100')
+            return
+
+        success = self.tv.volume_set(value)
+        if success:
+            volume = self.tv.get_volume()
+            self._send_response(200, {'message': f'Volume set to {value}', 'volume': volume})
+        else:
+            self._send_error(500, 'Failed to set volume')
+
     def handle_volume_mute(self):
         """Mute audio"""
         success = self.tv.mute()
@@ -681,10 +711,13 @@ def main():
 [tv]
 ip_address = "192.168.1.100"
 access_code = "your_psk_here"
+timeout = 5
+channel_filters = ["^megsz.*", ".*teszt$", "^mtv.*"]
 
 [server]
 port = 8080
 host = "0.0.0.0"
+debug = false
         """)
         return
     except Exception as e:
@@ -699,28 +732,47 @@ host = "0.0.0.0"
     if debug:
         logging.getLogger().setLevel(logging.DEBUG)
 
-    # Test connection
+    # Load HTML template once at startup
+    try:
+        html_path = os.path.join(os.path.dirname(__file__), 'tv_remote.html')
+        with open(html_path, 'r', encoding='utf-8') as f:
+            TVRequestHandler.html_content = f.read()
+    except FileNotFoundError:
+        logger.error(f"HTML template not found at {html_path}")
+        print(f"\n❌ HTML template file 'tv_remote.html' not found!")
+        return
+
+    # Initialize TV controller once at startup with channel filters
     tv_config = config.get('tv', {})
-    tv = SonyTVController(
+    channel_filters = tv_config.get('channel_filters', [])
+
+    TVRequestHandler.tv = SonyTVController(
         ip_address=tv_config.get('ip_address', ''),
         access_code=tv_config.get('access_code', ''),
-        timeout=tv_config.get('timeout', 5)
+        timeout=tv_config.get('timeout', 5),
+        channel_filters=channel_filters
     )
 
     print("\n" + "="*70)
     print("📺 SONY TV WEB SERVICE")
     print("="*70)
 
-    print(f"\n📡 Testing connection to TV at {tv.ip_address}...")
-    if tv.check_connection():
+    print(f"\n📡 Testing connection to TV at {TVRequestHandler.tv.ip_address}...")
+    if TVRequestHandler.tv.check_connection():
         print("✅ Successfully connected to TV")
 
-        power = tv.get_power_status()
+        power = TVRequestHandler.tv.get_power_status()
         print(f"⚡ TV Power Status: {power}")
 
         print("\n🔍 Scanning for channels...")
-        channels = tv.fetch_channels_from_tv()
-        print(f"✅ Found {len(channels)} channels")
+        channels = TVRequestHandler.tv.fetch_channels_from_tv()
+
+        if channel_filters:
+            print(f"\n🎯 Channel filters applied:")
+            for pattern in channel_filters:
+                print(f"   - Skip: '{pattern}'")
+
+        print(f"\n✅ Found {len(channels)} channels after filtering")
     else:
         print("⚠️  Could not connect to TV - check configuration")
 
@@ -736,6 +788,9 @@ host = "0.0.0.0"
     print(f"   - Live channel switching")
     print(f"   - Instant search filtering")
     print(f"   - 5 channels per row layout")
+    print(f"   - Direct volume set via /api/volume/set/{{value}}")
+    if channel_filters:
+        print(f"\n🎯 Channel filtering active - skipping {len(channel_filters)} patterns")
     print(f"\n🛑 Press Ctrl+C to stop")
     print("="*70)
 

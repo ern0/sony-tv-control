@@ -8,5 +8,6 @@ scp \
     sony_web_tv.py \
     tv_remote.html \
     icon_192x192.png \
+    tv.toml \
     \
     negro:/media/storage/data/sony-tv-control
