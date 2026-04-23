@@ -118,7 +118,7 @@
             display: flex;
             align-items: center;
             gap: 6px;
-            margin-left: auto;
+            flex: 1;
             flex-wrap: wrap;
         }
 
@@ -166,19 +166,22 @@
         .slider-container {
             display: flex;
             align-items: center;
-            gap: 8px;
+            gap: 6px;
             background: white;
             padding: 4px 10px;
             border-radius: 30px;
             border: 1px solid #dee2e6;
-            min-width: 160px;
+            flex: 1;
+            min-width: 200px;
         }
         .slider-icon {
             font-size: 1.1rem;
             color: #007bff;
+            flex-shrink: 0;
         }
         input[type=range] {
-            width: 100px;
+            flex: 1;
+            min-width: 0;
             height: 4px;
             -webkit-appearance: none;
             background: #dee2e6;
@@ -198,6 +201,32 @@
             font-size: 0.8rem;
             font-weight: 600;
             color: #212529;
+            flex-shrink: 0;
+        }
+        .vol-step-btn {
+            background: #e9ecef;
+            border: 1px solid #ced4da;
+            border-radius: 50%;
+            width: 26px;
+            height: 26px;
+            font-size: 1rem;
+            line-height: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            flex-shrink: 0;
+            touch-action: manipulation;
+            transition: 0.1s;
+        }
+        .vol-step-btn:active {
+            background: #007bff;
+            color: white;
+            border-color: #007bff;
+        }
+        .vol-step-btn:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
         }
 
         .search-section {
@@ -405,7 +434,9 @@
                 <!-- volume slider (GET on change) -->
                 <div class="slider-container">
                     <span class="slider-icon">🔊</span>
+                    <button class="vol-step-btn" id="volMinusBtn" onclick="stepVolume(-1)">−</button>
                     <input type="range" id="volumeSlider" min="0" max="100" value="0" step="1">
+                    <button class="vol-step-btn" id="volPlusBtn" onclick="stepVolume(1)">+</button>
                     <span class="volume-percent" id="volumePercent">0%</span>
                 </div>
             </div>
@@ -537,7 +568,7 @@
                     powerDot.className = powerDotClass;
 
                     // enable/disable based on connection
-                    const btns = [ 'powerOnBtn', 'powerOffBtn', 'muteBtn' ];
+                    const btns = [ 'powerOnBtn', 'powerOffBtn', 'muteBtn', 'volMinusBtn', 'volPlusBtn' ];
                     btns.forEach(id => document.getElementById(id).disabled = !connected);
                     volumeSlider.disabled = !connected;
                 })
@@ -598,6 +629,12 @@
                     // Revert to actual volume
                     loadVolume();
                 });
+        }
+
+        function stepVolume(delta) {
+            const newVal = Math.min(100, Math.max(0, currentVolume + delta));
+            volumeSlider.value = newVal;
+            setVolume(newVal);
         }
 
         function powerOn() { sendCommand('/api/power/on', 'Powering on...', loadStatus); }

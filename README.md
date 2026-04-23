@@ -444,3 +444,17 @@ if "hd_filter" is "only" or "drop", process channel list
 if "hd_filter" is "only", when a channel found name ends "HD", search and delete channel, which name without "HD"
 if "hd_filter" is "drop", when a channel found name ends "HD", search for channel name without "HD", if found, delete "HD" channel
 ```
+
+## V5 changes - volume widget better UX
+
+It was too small. The prompt is:
+```
+make volume slider wide, add plus and minus buttons
+```
+
+It's still too small.
+```
+occupy all available width
+```
+
+It could be better, but it looks fine.
